@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}
+title
+{% endblock %}
+
+{% block body %}
+<div class="row">
+    
+<div class="col-5">
+    <div class="container alert alert-secondary">
+      <form method = "POST" action="/info"> 
+        <div class="form-row align-items-center">
+          <div class="col-auto">
+            <div class="input-group mb-2">
+              <div class="input-group-prepend">
+                <div class="input-group-text">ЕИСЖС id</div>
+              </div>
+              <input type="text" class="form-control" name="input_id" placeholder="ЕИСЖС id" value = "{{obj_id}}">
+              <div class="input-group-append">
+                <button type="submit" class="btn btn-primary ">Выбрать</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+          <div class="container {{obj_info_visibility}}">
+            <hr>
+            <ul class="list-group">
+                <li class="list-group-item">
+                    Адрес: <b>{{adress}}</b>
+                    <br>
+                    Город: <b>{{city}}</b> 
+                    <br>
+                    Округ: <b>{{okrug}}</b> 
+                    <br>
+                    Район: <b>{{raion}}</b> 
+                </li>
+                <li class="list-group-item">
+                    ЖК: <b>{{housing_complex}}</b>
+                </li>
+                <li class="list-group-item">
+                    Класс жилья: <b>{{class_name}}</b>
+                </li>
+                <li class="list-group-item">
+                    Дата сдачи: <b>{{commiss_dt}}</b>
+                </li>
+              </ul>
+
+              <ul class="list-group mt-2">
+                <li class="list-group-item list-group-item-success">
+                    Последние продажи: 
+                </li>
+                <li class="list-group-item ">
+
+                    Ср. цена : <b>{{current_price}} </b>руб/м2
+        
+                </li>
+                <li class="list-group-item">
+                    Кол-во сделок: <b>{{contracts_cnt}}</b>
+                </li>
+                <li class="list-group-item">
+                    Отчетная дата: <b>{{last_report_dt}}</b>
+                </li>
+              </ul>
+              <form class="container my-3 text-center" action="/forecast">    
+                <input type="submit" class="btn btn-primary btn-lg btn-block" value = 'Прогнозировать'>
+            </form>
+          </div>
+          
+    </div>
+
+    <div class="alert alert-danger {{alert_visibility}}" role="alert">
+      Что-то не так!
+    </div>
+
+
+
+  
+</div>
+<div class="col">
+  <div class="cotaoner {{plot_visibility}}">
+    <img src="data:image/png;base64, {{ plot_url }}" class="img-fluid">
+  </div>
+</div>
+
+</div>
+{% endblock %}

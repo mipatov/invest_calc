@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}
+title
+{% endblock %}
+
+{% block body %}
+<div class="row">
+    
+<div class="col-4 ">
+  <form method = "POST" action="/forecast">
+      <div class="container alert alert-secondary {{param_settings_visibility}} ">
+        <div class="form-group alert alert-info">
+            <b>Расположение</b>
+            
+              <div class="input-group mt-3">
+                <div class="input-group-prepend ">
+                    <div class="input-group-text  ">
+                        <label for="city-select">Город</label>
+                        <input type="checkbox" class="form-check-input ms-2" checked name="city-check">
+                      </div>
+                </div>
+                <select class="custom-select form-control " name="city-select">
+                  <option> - Не выбран - </option>
+                  <option selected value="Москва">Москва</option>
+                </select>
+              </div>
+
+              <div class="input-group mt-3">
+                  <div class="input-group-prepend">
+                      <div class="input-group-text">
+                        <label for="okrug-select">Округ</label>
+                        <input type="checkbox"  class="form-check-input ms-2" name="okrug-check"  {% if checkbox['okrug'] %} checked {%endif%}>
+                      </div>
+                </div>
+                <select class="custom-select form-control " name="okrug-select">
+                    <option> - Не выбран - </option>
+                    {% for item in okrug_list%}
+                    <option value="{{item}}" {% if item == okrug %} selected {%endif%}>{{item}}</option>
+                    {% endfor %}
+                </select>
+              </div>
+
+              <div class="input-group mt-3">
+                  <div class="input-group-prepend">
+                      <div class="input-group-text">
+                        <label for="raion-select">Район</label>
+                        <input type="checkbox"  class="form-check-input ms-2" name="raion-check" {% if checkbox['raion'] %} checked {%endif%}>
+                      </div>
+                </div>
+                <select class="custom-select form-control " name="raion-select">
+                  <option > - Не выбран - </option>
+                  {% for item in raion_list%}
+                  <option value="{{item}}" {% if item == raion %} selected {%endif%}>{{item}}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+          </div> 
+          <div class="form-group alert alert-info ">
+            <label for="class-select"><b>Класс жилья</b></label>
+            <input type="checkbox"  class="form-check-input ms-2" name="class-check" {% if checkbox['class'] %} checked {%endif%}>
+            <select class="form-control mt-3" name="class-select">
+                <option> - Не выбран - </option>
+                {% for item in cls_name_list%}
+                <option value="{{item}}" {% if item == class_name %} selected {%endif%}>{{item}}</option>
+                {% endfor %}
+            </select>
+          </div>
+          <div class="form-group alert alert-info">
+            <label for="commissioning-select"><b>Дата сдачи</b></label>
+            <input name="commissioning-select" class="form-control mt-3" type="date" value = "{{commiss_dt}}"/>
+          </div>
+
+          <div class="form-group  alert alert-info mb-0">
+            <label for="current-price-input"><b>Текущая цена</b></label>
+            <div class="input-group my-3">
+                <input name="current-price-input" class="form-control " type="text" value = "{{current_price}}" />
+                <div class="input-group-append">
+                    <span class="input-group-text">руб/м2</span>
+                  </div>
+            </div>
+            <label for="history-check"><b>Отобразить историю</b></label>
+            <input type="checkbox"  class="form-check-input ms-2" name="history-check" {% if history_allow and checkbox['history'] %} checked {%endif%}  {% if not history_allow %} disabled {%endif%}>
+          </div>
+        
+        </div>
+        
+        <div class="alert alert-danger {{alert_visibility}}" role="alert">
+          Что-то не так!
+        </div>
+        
+        <div class="container alert alert-secondary">
+          <div class="input-group mb-3">
+            <div class="input-group-prepend">
+              <span class="input-group-text">Период</span>
+            </div>
+            <input type="text" class="form-control" name="period-input" value = "{{forecast_period}}" >
+            <div class="input-group-append">
+              <span class="input-group-text">мес.</span>
+            </div>
+          </div>
+          <div class="text-center">
+            <button class="btn btn-primary btn-lg" type="submit">Прогноз</button>
+          </div>
+        </div>
+  </form>
+
+
+</div>
+<div class="col">
+  <div class="container {{plot_visibility}}">
+    <div class="alert alert-secondary">
+      <img src="data:image/png;base64, {{ plot_url }}" class="img-fluid">
+    </div>
+    <div class="alert alert-secondary">
+      <div class="alert alert-info">
+        Расположение: <b> {{ city }}{% if checkbox['okrug']  %}, {{ okrug }} {%endif%}{% if checkbox['raion']  %}, {{ raion }} {%endif%} </b><br>
+        {% if checkbox['class']  %}  Класс: <b>{{ class_name}}</b><br> {%endif%}
+        Дата сдачи: <b>{{commiss_dt}}</b><br>
+        Текущая цена: <b> {{current_price}}</b> руб/м2<br>
+        Период прогноза: <b>{{forecast_period}}</b> мес.<br>
+      </div>
+      <div class="alert alert-info mb-0">
+          Доходность: <b>{{annum_percent}}%</b> годовых
+      </div>
+      <div class="alert alert-warning  mt-3 mb-0 {{high_price_alert_visibility}}">
+        <b>Текущая цена выше рынка!</b>
+    </div>
+    </div>
+    <!-- <div class="alert alert-secondary">{{out_df}}</div> -->
+  </div>
+</div>
+
+</div>
+{% endblock %}
