@@ -64,7 +64,7 @@ display_pagams = {
 }
 plot_param = {
     "plot_url":""
-    ,"annum_percent":""
+    ,"percent":""
     ,"out_df":""
 }
 object_params = {
@@ -220,9 +220,9 @@ def custom_object():
                 }
         update_object_params(params) 
         
-
+        
         forecast_params = {
-            'current_price': obj_info_params['price_dynamics']['avg_price_sqm'].to_list() \
+            'current_price': remove_outliers_from_price_dinamics(3)['avg_price_sqm'].to_list() \
                                 if is_history_allow() and filter_checkboxes['history'] \
                                 else current_price
             ,'commiss_dt':commiss_dt
@@ -239,8 +239,9 @@ def custom_object():
             print('[WARN] Found no data!')
             toggle_block('alert_visibility',True)
         else:
-            annum_percent = percentage_per_annum(forecast_df.price_sqm_obj_forecast.dropna().iloc[0],forecast_df.price_sqm_obj_forecast.iloc[-1],forecast_period)
-            plot_param['annum_percent'] = f"{annum_percent:.2f}"
+            # annum_percent = percentage_per_annum(forecast_df.price_sqm_obj_forecast.dropna().iloc[0],forecast_df.price_sqm_obj_forecast.iloc[-1],forecast_period)
+            percent = (-1+forecast_df.price_sqm_obj_forecast.iloc[-1]/forecast_df.price_sqm_obj_forecast.dropna().iloc[0]) * 100
+            plot_param['percent'] = f"{percent:.2f}"
             plot_param['out_df'] = forecast_df
             print(forecast_df)
             show_plot(price_forecast_plot(forecast_df,commiss_dt))
@@ -258,6 +259,13 @@ def custom_object():
 def is_history_allow():
     return type(obj_info_params.get('price_dynamics') ) is type(pd.DataFrame()) and not obj_info_params.get('price_dynamics').empty
         
+def remove_outliers_from_price_dinamics(count_trashhold = 3):
+    df  = obj_info_params['price_dynamics'].copy()
+    idx = df.query('contract_conclude_cnt < @count_trashhold').index
+    df.loc[idx,'avg_price_sqm'] = None
+    print(df)
+    df['avg_price_sqm'] = df['avg_price_sqm'].interpolate()
+    return df 
 
 def fill_obj_params_from_eisgs():
     if len(obj_info_params) == 0:

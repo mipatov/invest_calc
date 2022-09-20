@@ -127,28 +127,29 @@ class MacroMLModel(Model):
         #     2024:1.01
         # }
         predictions_dict = dict(zip(self.model_data.index,self.model.predict(self.model_data)/100))
-        # forecast_by_monthes= {k:pow(v,1/12) for k,v in forecast_by_year.items() }
+
         return predictions_dict
 
 
     def forecast(self,market_data,period:int, Q_weights = [0.15,0.25,0.25,0.35]):
         from math import ceil
 
-    #     scaling for market
         first_idx = 12
         if len(market_data)<12:
             first_idx = 0
-        real_percent = market_data.iloc[-1]/market_data.iloc[-first_idx]
-
+        real_percent = market_data.iloc[-2]/market_data.iloc[-first_idx]
+        
         quarters = pd.DataFrame([market_data[-first_idx:].index.year,market_data[-first_idx:].index.map(get_quarter)]).T.drop_duplicates()
         model_percent = 1
         for i,v in quarters.iterrows():
-            year_prec = self.macro_forecast_dict[v[0]]-1
-            model_percent += year_prec*Q_weights[v[1]-1]
+            year_prec = self.macro_forecast_dict[v[0]]
+            quarter_perc = year_prec**(1/4)
+            model_percent *= quarter_perc
 
-        scale_c =real_percent[0]/ model_percent
+        scale_c =(real_percent[0]-1)/ (model_percent-1)
         forecast_by_year_scaled = { k:scale_c*(v-1)+1  for k,v in self.macro_forecast_dict.items() }
-        print(self.macro_forecast_dict)
+
+        print(forecast_by_year_scaled)
 
 
     #     prediction market
@@ -167,18 +168,15 @@ class MacroMLModel(Model):
         
         
         for i,v in quarter_df.iterrows():
-            if prev_year!=v[0]:
-                prev_year=v[0]
-                start_price = new_price
-                start_quarter_num = 1
-            year_prec = forecast_by_year_scaled[v[0]]-1
-            new_price  = start_price*(1+ year_prec*sum([Q_weights[q-1] for q in range(start_quarter_num,v[1]+1)]))
+
+            year_prec = forecast_by_year_scaled[v[0]]
+            quarter_perc = year_prec**(1/4)
+            new_price  = start_price*quarter_perc
+
             prediction_price_list.append(new_price)
-          
-        # dt_format = lambda dt: datetime.datetime.strftime('%Y-%m-%d')
-        # date2dt = lambda dt : datetime.datetime.combine(dt, datetime.datetime.min.time())
-        # print(quarter_df.index)
-        # print([add_months(quarter_df.index[0],i) for i in range(Q_period*3)])
+            start_price = new_price
+       
+
         return pd.DataFrame(prediction_price_list,index = quarter_df.index,columns=['price_sqm_forecast'])\
                 .reindex([add_months(quarter_df.index[0],i) for i in range(Q_period*3)])\
                 .interpolate()

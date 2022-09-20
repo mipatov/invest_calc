@@ -112,7 +112,7 @@ class Calculator():
         self.check_connections()
         obj_info_query = OBJ_INFO_SQL.format(obj_id)
         df_obj = pd.read_sql_query(obj_info_query,self.ETL_CON)
-        print(df_obj)
+     
         if df_obj.empty:
             
             return pd.DataFrame()
@@ -151,7 +151,7 @@ class Calculator():
         
         return match_df
 
-    def get_market_data(self,ao_name=None,raion_name=None,cls_name=None):
+    def get_market_data(self,ao_name=None,raion_name=None,cls_name=None, transport_accessibility = None,    ):
         today_date = datetime.datetime.today().strftime("%Y-%m-%d")
         print(today_date,ao_name,raion_name,cls_name)
         # if data_filter:
@@ -319,16 +319,21 @@ class Calculator():
         
         concat_market_and_forecast_df.loc[market_data.index[-1],'price_sqm_obj_forecast'] =  current_price
 
+        before_commiss_forecast_index = concat_market_and_forecast_df.loc[market_data.index[-1]:commiss_dt].index
 
-        # concat_market_and_forecast_df.loc[commiss_dt,'price_sqm_obj_forecast'] =  concat_market_and_forecast_df.loc[commiss_dt,'price_sqm_forecast']*object_growth
+        delta =  market_data.iloc[-1,0]*object_advantage - current_price
+        delta_series = pd.Series(index= before_commiss_forecast_index)
+        delta_series[0] =  delta
+        delta_series[-1] =  0
+        delta_series =  delta_series.interpolate()
+
         concat_market_and_forecast_df.loc[commiss_dt:,'price_sqm_obj_forecast'] = \
                         concat_market_and_forecast_df.loc[commiss_dt:,'price_sqm_forecast']*object_advantage
-        concat_market_and_forecast_df.loc[market_data.index[-1]:commiss_dt,'price_sqm_obj_forecast'] = \
-                        concat_market_and_forecast_df.loc[market_data.index[-1]:commiss_dt,'price_sqm_obj_forecast'].interpolate()
+        concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_obj_forecast'] = \
+                         (concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_forecast']-delta_series)*object_advantage
         concat_market_and_forecast_df = concat_market_and_forecast_df.iloc[:len(market_data)+period]
         
-        # concat_market_and_forecast_df.loc[:,'price_sqm_obj_forecast']*=object_growth
-        
+    
         if not object_history.isnull().values.all():
             concat_market_and_forecast_df.loc[object_history.index,'price_sqm_obj_history'] =  object_history
     
