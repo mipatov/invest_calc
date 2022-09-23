@@ -110,7 +110,8 @@ def get_gap_df(market_df,prmary_df,good_only = False):
 
 
 def price_line(df):
-    ewm_df = df.groupby([(df.last_date.map(str2dt).dt.year), (df.last_date.map(str2dt).dt.month)]).median()[['price_sqm_amt']]
+    df.last_date = df.last_date.map(lambda x : str2dt(x[:10]))
+    ewm_df = df.groupby([(df.last_date.dt.year), (df.last_date.dt.month)]).median()[['price_sqm_amt']]
     try :
         ewm_df = ewm_df.drop((2021,4)).ewm(span=3).mean()
     except:
@@ -120,3 +121,10 @@ def price_line(df):
 
 def str2dt(dt_str):
     return datetime.datetime.strptime(dt_str,'%Y-%m-%d')
+
+
+def read_json(path_to_json):
+    import json
+    with open(path_to_json, "rb") as f:
+        x = json.load(f)
+    return x 

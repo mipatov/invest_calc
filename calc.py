@@ -7,26 +7,44 @@ from module import *
 
 class Calculator():
 
-    def __init__(self, room_cnt = False,use_cache = False) -> None:
+    def __init__(self, room_cnt = False,use_cache = False, regions_info_file  = 'regions/regions.info') -> None:
         self.room_cnt_flag = room_cnt
         self.get_db_connections()
         self.make_building_class_name_dict()
-        # cache_path = 'cache/db_data_cached.csv'
-        cache_path = 'cache/historical_cian_last_advert_only_geo.csv'
+        self.regions_info = read_json(regions_info_file)
 
-        if room_cnt:
-            cache_path = 'cache/db_data_rooms_cached.csv'
+        self.city = ""
+        # cache_path = 'cache/db_data_cached.csv'
+        # cache_path = 'cache/historical_cian_last_advert_only_geo.csv'
+
+        # if room_cnt:
+        #     cache_path = 'cache/db_data_rooms_cached.csv'
         
-        if use_cache:
-            self.db_data = pd.read_csv(cache_path,index_col = 0)
-            print('[INIT] Load cached data')
-        else : 
-            self.db_data = self.load_data()
-            print('[INIT] Data loaded successfuly')
-            self.db_data = self.preprocess_data(self.db_data)
-            print('[INIT] Data preprocessed successfuly')
-            self.db_data.to_csv(cache_path)
+        # if use_cache:
+        #     self.db_data = pd.read_csv(cache_path,index_col = 0)
+        #     print('[INIT] Load cached data')
+        # else : 
+        #     self.db_data = self.load_data()
+        #     print('[INIT] Data loaded successfuly')
+        #     self.db_data = self.preprocess_data(self.db_data)
+        #     print('[INIT] Data preprocessed successfuly')
+        #     self.db_data.to_csv(cache_path)
             
+    def get_geo_data(self,city_name):
+        import os.path
+        path_name = self.regions_info[city_name]['path_name']
+        path = f'regions/{path_name}/geo_data.csv'
+        if os.path.isfile(path):
+            return  pd.read_csv(path)
+        else :
+            return None
+
+    def load_market_data(self,city_name):
+        path_name = self.regions_info[city_name]['path_name']
+        path = f'regions/{path_name}/market_data.csv'
+
+        return  pd.read_csv(path)
+
 
     def get_db_connections(self): 
         try  : 
@@ -41,6 +59,7 @@ class Calculator():
         except Exception as e:
             print(e)
 
+
     def check_connections(self):
         try:
             cur = self.ETL_CON.cursor()
@@ -51,16 +70,20 @@ class Calculator():
             self.get_db_connections()
         
 
-    def get_polygons(self):
+    def get_polygons(self,city_name):
         from shapely import wkt
         from geopandas import GeoDataFrame
+
 
 #         sel_sql = POLYGONS_SQL
 
 #         df_polygons = pd.read_sql_query(sel_sql,self.ETL_CON)
-        df_polygons = pd.read_csv('mo.csv')
+        df_polygons = self.get_geo_data(city_name)
+        
+        if df_polygons is None :
+            return None
 
-        df_polygons['geometry'] = df_polygons['WKT'].apply(wkt.loads)
+        df_polygons['geometry'] = df_polygons['wkt'].apply(wkt.loads)
         gdf_polygons = GeoDataFrame(df_polygons, crs = 'epsg:4326')
 
         return gdf_polygons
@@ -118,11 +141,21 @@ class Calculator():
             return pd.DataFrame()
         df_obj['building_class_type'] = df_obj['building_class_type'].replace(DICT_CSL_CODE_EISGS2CIAN)
         df_obj['building_class_name'] = df_obj['building_class_type'].replace(self.code2cls_name)
+
+    
+        city_name = df_obj['region_name'].values[0]
         
         geo_data = GeoDataFrame(df_obj, crs = 'epsg:4326',
                                 geometry=points_from_xy(df_obj.realty_longitude, 
                                                             df_obj.realty_latitude))
-        gdf_polygons = self.get_polygons()
+        gdf_polygons = self.get_polygons(city_name)
+
+        if gdf_polygons is None : 
+            df_obj['district'] = None
+            df_obj['subdistrict'] = None
+
+            return df_obj.loc[0,OBJ_INFO_FIELDS]
+
         gdf_quarters = sjoin(geo_data, gdf_polygons)
         gdf_quarters = gdf_quarters[OBJ_INFO_FIELDS]
         
@@ -151,18 +184,24 @@ class Calculator():
         
         return match_df
 
-    def get_market_data(self,ao_name=None,raion_name=None,cls_name=None, transport_accessibility = None,    ):
+    def get_market_data(self,city_name,ao_name=None,raion_name=None,cls_name=None, transport_accessibility = None,    ):
         today_date = datetime.datetime.today().strftime("%Y-%m-%d")
-        print(today_date,ao_name,raion_name,cls_name)
+        # print(today_date,ao_name,raion_name,cls_name)
+        
+        if self.city != city_name:
+            self.city = city_name
+            self.market_data = self.load_market_data(city_name)
+            # print(self.market_data.columns)
+
         # if data_filter:
         qq = "advert_category_code == 3 \
             and commissioning_date <= @today_date"
         # if data_filter['city']
-        if ao_name :
-            qq+= " and ABBREV_AO == @ao_name "
+        if ao_name and 'district' in self.market_data.columns:
+            qq+= " and district == @ao_name "
 
-        if raion_name :
-            qq+= " and NAME == @raion_name "
+        if raion_name  and 'district' in self.market_data.columns :
+            qq+= " and subdistrict == @raion_name "
 
         if cls_name:
             qq+= " and building_class_name ==  @cls_name "
@@ -172,9 +211,9 @@ class Calculator():
         #         and building_class_name ==  @cls_name\
         #         and ABBREV_AO == @ao_name"
         
-        market_data = self.db_data.query(qq)
-        print(qq)
-        print('empty data -- ',market_data.empty)
+        market_data = self.market_data.query(qq)
+        # print(qq)
+        # print('empty data -- ',market_data.empty)
         if market_data.empty:
             return market_data
         
@@ -280,16 +319,27 @@ class Calculator():
 
     def _make_forecast_new(self,market_data:pd.DataFrame,current_price,forecast_period,):
         self.check_connections()
-        macro = MacroMLModel(market_data,forecast_period)
+        path_name = self.regions_info[self.city]['path_name']
+        folder_path = f'regions/{path_name}/'
+        macro = MacroMLModel(market_data,forecast_period,models_folder_path= folder_path)
         
         return macro.market_forecast_df
         
 
-    def make_forecast_custom(self,current_price,commiss_dt,period=12,ao_name=None,raion_name=None,class_name=None):
+    def make_forecast_custom(self,current_price,commiss_dt,period=12,city_name = None,ao_name=None,raion_name=None,class_name=None):
+        if city_name is None:
+            print('[ERR] city is None!')
+            return None
+
         # print(data_filter)
-        market_data = self.get_market_data(ao_name,raion_name,class_name)
+        market_data = self.get_market_data(city_name,ao_name,raion_name,class_name)
         # пока выбрасываем август
         market_data = market_data[:-1]
+
+        diff = diff_month(market_data.index[-1],market_data.index[0])
+        new_idx = [add_months(market_data.index[0],i) for i in range(diff+1)]
+        market_data = market_data.reindex(new_idx).interpolate()
+       
 
         if len(market_data)<6:
             print(f'Found {len(market_data)} months')
@@ -302,6 +352,7 @@ class Calculator():
 
         object_history = pd.DataFrame(columns=['price_sqm_obj_history'],index= market_data.index)
         object_advantage = 1 
+        print(current_price)
         if type(current_price) is list :
             object_history.iloc[-len(current_price):,0] =  current_price[-len(object_history):]
             current_price =  current_price[-1]

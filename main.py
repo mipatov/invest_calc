@@ -45,14 +45,34 @@ def get_db_connections(self, base):
     print('Wrong base-param! Excepted one of ["ELT","SSVD"]')
 
 
-def get_okrug_list():
-    mo = pd.read_csv('mo.csv')
-    return sorted(list(mo.ABBREV_AO.unique()))
 
-def get_raion_list():
-    mo = pd.read_csv('mo.csv')
-    return sorted(list(mo.NAME.unique()))
+def get_city_list():
+    dct = read_regions_json()
+    return sorted(list(dct.keys()))
 
+def get_okrug_list(city):
+    print('!@#!@#!@',city)
+    dct = read_regions_json()
+    return sorted(list(dct[city].keys()))
+
+def get_raion_list(city,okrug):
+    dct  =read_regions_json()
+    print(city,okrug)
+    if len(dct[city].keys())>0:
+        if okrug and okrug.strip() != '- Не выбран -'.strip() :
+            return sorted(list(dct[city][okrug]))
+        else: 
+            raion_list = []
+            for k,v in dct[city].items():
+                raion_list.extend(v)
+            return raion_list
+    return []
+
+def read_regions_json():
+    import json 
+    with open("static/json/regions.json", "rb") as f:
+        regions_dct = json.load(f)
+    return regions_dct
 
 
 display_pagams = {
@@ -95,8 +115,10 @@ def set_object_param(key,value):
     object_params[key] = value
 
 list_data_params = {
-    'okrug_list': get_okrug_list()
-    ,'raion_list': get_raion_list()
+    'city_list': get_city_list()
+    ,'okrug_list': get_okrug_list("Москва")
+    ,'raion_list':  get_raion_list("Москва",None)
+    # ,'regions_dict': read_regions_json()
     ,'cls_name_list':['эконом','комфорт','бизнес','премиум']
 }
 
@@ -138,8 +160,8 @@ def info():
                 "adress" :  obj_info['adress']
                 ,"housing_complex" :  obj_info['housing_complex']
                 ,"city" : obj_info['region_name']
-                ,"okrug" : obj_info['ABBREV_AO']
-                ,"raion" : obj_info['NAME']
+                ,"okrug" : obj_info['district']
+                ,"raion" : obj_info['subdistrict']
                 ,"class_name" : obj_info['building_class_name']
                 ,"commiss_dt" : obj_info['obj_comiss_dt']
                 ,'current_price': "--"
@@ -179,9 +201,10 @@ def custom_object():
     toggle_block('plot_visibility',False)
     if len(obj_info_params) != 0:
         fill_obj_params_from_eisgs()
-    # print(object_params.items())
+    print(object_params.items())
 
     if request.method == 'POST':
+        city_name = request.form['city-select']
         ao_name = request.form['okrug-select']
         raion_name = request.form['raion-select']
         class_name = request.form['class-select']
@@ -194,7 +217,10 @@ def custom_object():
         filter_checkboxes['raion'] = bool(request.form.get('raion-check'))
         filter_checkboxes['class'] = bool(request.form.get('class-check'))
         filter_checkboxes['history'] = bool(request.form.get('history-check'))
-       
+        
+        
+        # print(city_name,get_okrug_list(city_name))
+
         try:
             commiss_dt =  datetime.strptime(commiss_dt,'%Y-%m-%d').replace(day = 1)
             current_price = int(current_price)
@@ -210,7 +236,7 @@ def custom_object():
                                     ,checkbox = filter_checkboxes
                                     ,history_allow = is_history_allow())
         params = {
-                    "city" : "Москва"
+                    "city" : city_name
                     ,"okrug" : ao_name
                     ,"raion" : raion_name
                     ,"class_name" :class_name
@@ -220,20 +246,21 @@ def custom_object():
                 }
         update_object_params(params) 
         
-        
+        trashhold = 0
         forecast_params = {
-            'current_price': remove_outliers_from_price_dinamics(3)['avg_price_sqm'].to_list() \
+            'current_price': remove_outliers_from_price_dinamics(trashhold)['avg_price_sqm'].to_list() \
                                 if is_history_allow() and filter_checkboxes['history'] \
                                 else current_price
             ,'commiss_dt':commiss_dt
             ,'period':forecast_period
+            ,'city_name':city_name
             ,'ao_name': ao_name if filter_checkboxes['okrug'] else None    
             ,'raion_name': raion_name if filter_checkboxes['raion'] else None    
             ,'class_name': class_name if filter_checkboxes['class'] else None   
         }
         forecast_df = calc.make_forecast_custom(**forecast_params)
         
-        
+        print(forecast_df)
 
         if forecast_df.empty:
             print('[WARN] Found no data!')
@@ -243,10 +270,13 @@ def custom_object():
             percent = (-1+forecast_df.price_sqm_obj_forecast.iloc[-1]/forecast_df.price_sqm_obj_forecast.dropna().iloc[0]) * 100
             plot_param['percent'] = f"{percent:.2f}"
             plot_param['out_df'] = forecast_df
-            print(forecast_df)
+            # print(forecast_df)
             show_plot(price_forecast_plot(forecast_df,commiss_dt))
             check_high_price(forecast_df)
 
+    if object_params['city']:
+        list_data_params['okrug_list'] = get_okrug_list(object_params.get('city'))
+        list_data_params['raion_list'] = get_raion_list(object_params.get('city'),object_params.get('okrug'))
 
     return render_template('forecast.html' ,**plot_param
                                         ,**get_object_params()
@@ -263,7 +293,7 @@ def remove_outliers_from_price_dinamics(count_trashhold = 3):
     df  = obj_info_params['price_dynamics'].copy()
     idx = df.query('contract_conclude_cnt < @count_trashhold').index
     df.loc[idx,'avg_price_sqm'] = None
-    print(df)
+    # print(df)
     df['avg_price_sqm'] = df['avg_price_sqm'].interpolate()
     return df 
 

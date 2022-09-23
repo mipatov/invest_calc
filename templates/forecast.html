@@ -20,9 +20,11 @@ title
                         <input type="checkbox" class="form-check-input ms-2" checked name="city-check">
                       </div>
                 </div>
-                <select class="custom-select form-control " name="city-select">
+                <select class="custom-select form-control " name="city-select" id = 'city-select' onchange="city_change_event()" onclick="city_change_event()" onload="city_change_event()">
                   <option> - Не выбран - </option>
-                  <option selected value="Москва">Москва</option>
+                  {% for item in city_list%}
+                  <option value="{{item}}" {% if item == city %} selected {%endif%}>{{item}}</option>
+                  {% endfor %}
                 </select>
               </div>
 
@@ -33,7 +35,7 @@ title
                         <input type="checkbox"  class="form-check-input ms-2" name="okrug-check"  {% if checkbox['okrug'] %} checked {%endif%}>
                       </div>
                 </div>
-                <select class="custom-select form-control " name="okrug-select">
+                <select class="custom-select form-control " name="okrug-select" id ="okrug-select"  onchange="okrug_change_event()" onclick="okrug_change_event()"  onloadeddata="city_change_event()">
                     <option> - Не выбран - </option>
                     {% for item in okrug_list%}
                     <option value="{{item}}" {% if item == okrug %} selected {%endif%}>{{item}}</option>
@@ -48,7 +50,7 @@ title
                         <input type="checkbox"  class="form-check-input ms-2" name="raion-check" {% if checkbox['raion'] %} checked {%endif%}>
                       </div>
                 </div>
-                <select class="custom-select form-control " name="raion-select">
+                <select class="custom-select form-control " name="raion-select" id="raion-select">
                   <option > - Не выбран - </option>
                   {% for item in raion_list%}
                   <option value="{{item}}" {% if item == raion %} selected {%endif%}>{{item}}</option>
@@ -134,3 +136,95 @@ title
 
 </div>
 {% endblock %}
+
+
+
+{% block script %}
+function fill_all_raions (raions_data) {
+  var raion_select = document.getElementById("raion-select"); 
+  j = 1
+  for (var i=0; i < raions_data.length; i++)
+    {
+
+      for (var k = 0; k < raions_data[i].length; k++){
+        var option = new Option(raions_data[i][k],raions_data[i][k])
+        raion_select.options[j] =option ;
+        j++
+        
+      }
+    }
+}
+
+function city_change_event () {
+  var city_select = document.getElementById("city-select"); 
+  var okrug_select = document.getElementById("okrug-select"); 
+  var raion_select = document.getElementById("raion-select"); 
+
+  var x = fetch('{{ url_for('static',filename = 'json/regions.json')}}')
+                .then(function (response) {
+                  return response.json();
+                })
+                .then(function (data) {
+                  if (city_select.selectedIndex == 0) {
+                    okrug_select.options.length = 0
+                    okrug_select.options[0] = new Option(" - Не выбран - "," - Не выбран - ");
+                    raion_select.options.length = 0
+                    raion_select.options[0] = new Option(" - Не выбран - "," - Не выбран - ");
+                    return ;
+                  }
+                  var selected_data = data[city_select.options[city_select.selectedIndex].value]
+                  var okrug_list = Object.keys(selected_data);
+                  var raions_data = Object.values(selected_data);
+                  okrug_select.options.length = 0
+                  okrug_select.options[0] = new Option(" - Не выбран - "," - Не выбран - ");
+                  for (var i=0; i < okrug_list.length; i++)
+                  {
+                    okrug_select.options[i+1] = new Option(okrug_list[i],okrug_list[i]);
+                  }
+
+                  raion_select.options.length = 0
+                  raion_select.options[0] = new Option(" - Не выбран - "," - Не выбран - ");
+                  
+                  if ((raions_data.length>0) && (raions_data[0].length>0 )){
+                    fill_all_raions(raions_data)
+                      
+                  }
+                })
+}
+
+function okrug_change_event() {
+  var city_select = document.getElementById("city-select"); 
+  var okrug_select = document.getElementById("okrug-select"); 
+  var raion_select = document.getElementById("raion-select"); 
+
+  var x = fetch('{{ url_for('static',filename = 'json/regions.json')}}')
+                .then(function (response) {
+                  return response.json();
+                })
+                .then(function (data) {
+                  var city = city_select.options[city_select.selectedIndex].value
+                  var okrug = okrug_select.options[okrug_select.selectedIndex].value
+                  var selected_data = data[city]
+                  var raions_data = Object.values(selected_data);
+                  
+                  if (okrug_select.selectedIndex == 0) {
+                    fill_all_raions(raions_data)
+                    return ;
+                  }
+                  
+                  raion_select.options.length = 0
+                  raion_select.options[0] = new Option(" - Не выбран - "," - Не выбран - ");
+                  
+                  if (raions_data[0].length>0 ){
+                    raions_list = selected_data[okrug]
+
+                    for (var i=0; i < raions_list.length; i++)
+                    {
+                      raion_select.options[i+1] = new Option(raions_list[i],raions_list[i]);
+                    }  
+                  }
+                  
+                })
+}
+{%endblock%}
+

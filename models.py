@@ -95,16 +95,15 @@ class DummyMacroModel(Model):
 
 class MacroMLModel(Model):
 
-    def __init__(self,market_data,period,Q_weidhts=[0.15,0.25,0.25,0.35]) -> None:
+    def __init__(self,market_data,period,models_folder_path = 'models/') -> None:
         
-        model_path = 'models/relative_macro_model.pkl'
-        model_data_path = 'data/abs_data.csv'
-        self.model = self.load_model(model_path)
-        self.model_data = self.load_model_data(model_data_path,do_relative = True)
-        # print(self.model_data)
+        self.model_data_path = models_folder_path + '/model_data.csv'
+        self.model_config_path = models_folder_path + '/models.conf'
+        self.models_folder_path = models_folder_path + '/models'
+
         self.macro_forecast_dict = self.get_macro_forecast()
     
-        self.market_forecast_df =self.forecast(market_data,period,Q_weights = Q_weidhts)
+        self.market_forecast_df =self.forecast(market_data,period)
 
 
     def load_model(self,path):
@@ -120,18 +119,38 @@ class MacroMLModel(Model):
 
 
     def get_macro_forecast(self):
-        # predictions_dict = {
-        #     2021:1.38,
-        #     2022:1.47,
-        #     2023:0.91,
-        #     2024:1.01
-        # }
-        predictions_dict = dict(zip(self.model_data.index,self.model.predict(self.model_data)/100))
+        from os import listdir
+        from os.path import isfile, join, splitext,basename
+        import json
+
+        models_names = [join(self.models_folder_path, f) for f in listdir(self.models_folder_path) if splitext(f)[-1] == '.pkl']
+        all_data = self.load_model_data(self.model_data_path,do_relative = True)
+        
+        with open(self.model_config_path, "r") as f:
+            config_dict = json.load(f)
+
+
+        print(f'Found {len(models_names)} models.')
+        print(*models_names,sep='\n')
+
+        predicitons_list = []
+        for path in models_names:
+            name = splitext(basename(path))[0]
+            model = self.load_model(path)
+            features = config_dict[name]
+            data = all_data[features]
+            # print(path,features)
+            predictions = model.predict(data)
+            predicitons_list.append(predictions)
+        
+        predictions_dict = (pd.DataFrame(predicitons_list,columns=all_data.index).mean()/100).to_dict()
 
         return predictions_dict
+    
 
 
-    def forecast(self,market_data,period:int, Q_weights = [0.15,0.25,0.25,0.35]):
+
+    def forecast(self,market_data,period:int):
         from math import ceil
 
         first_idx = 12
@@ -149,7 +168,7 @@ class MacroMLModel(Model):
         scale_c =(real_percent[0]-1)/ (model_percent-1)
         forecast_by_year_scaled = { k:scale_c*(v-1)+1  for k,v in self.macro_forecast_dict.items() }
 
-        print(forecast_by_year_scaled)
+        
 
 
     #     prediction market

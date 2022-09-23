@@ -102,7 +102,7 @@ OBJ_INFO_SQL = '''
             from emarti.act_obj ao 
             	inner join dict.region_districts rd on ao.rpd_region_cd  = rd.rpd_region_cd 
                 left join emarti.act_obj_parcel aop on aop.obj_id = ao.obj_id
-            where ao.obj_id = {0} and ao.rpd_region_cd = 77
+            where ao.obj_id = {0} 
 '''
 
 CURRENCY_SQL = '''
@@ -136,7 +136,7 @@ DICT_CSL_CODE_EISGS2CIAN = {
                                 3:2,
                                 4:3
                             }
-OBJ_KEY_FIELDS = ['region_name', 'ABBREV_AO','NAME', 'OKTMO', 'building_class_type','building_class_name']
+OBJ_KEY_FIELDS = ['region_name', 'district','subdistrict','building_class_type','building_class_name']
 OBJ_INFO_FIELDS = OBJ_KEY_FIELDS + ['adress', 'housing_complex','obj_comiss_dt']
 
 
