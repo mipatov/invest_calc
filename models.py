@@ -136,8 +136,12 @@ class MacroMLModel(Model):
         predicitons_list = []
         for path in models_names:
             name = splitext(basename(path))[0]
+            enabled_flag = config_dict[name]['enabled']
+            print(f'{name} eanbled is {enabled_flag}')
+            if not enabled_flag:
+                continue
             model = self.load_model(path)
-            features = config_dict[name]
+            features = config_dict[name]['coefs'].keys()
             data = all_data[features]
             # print(path,features)
             predictions = model.predict(data)
