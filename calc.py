@@ -200,7 +200,7 @@ class Calculator():
         if ao_name and 'district' in self.market_data.columns:
             qq+= " and district == @ao_name "
 
-        if raion_name  and 'district' in self.market_data.columns :
+        if raion_name  and 'subdistrict' in self.market_data.columns :
             qq+= " and subdistrict == @raion_name "
 
         if cls_name:

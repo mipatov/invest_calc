@@ -169,11 +169,8 @@ class MacroMLModel(Model):
             quarter_perc = year_prec**(1/4)
             model_percent *= quarter_perc
 
-        scale_c =(real_percent[0]-1)/ (model_percent-1)
+        scale_c =abs((real_percent[0]-1)/ (model_percent-1))
         forecast_by_year_scaled = { k:scale_c*(v-1)+1  for k,v in self.macro_forecast_dict.items() }
-
-        
-
 
     #     prediction market
         market_quarter_df = get_quarter_from_dates(list(market_data.index))
