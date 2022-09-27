@@ -130,8 +130,8 @@ class MacroMLModel(Model):
             config_dict = json.load(f)
 
 
-        print(f'Found {len(models_names)} models.')
-        print(*models_names,sep='\n')
+        print(f'Found {len(models_names)} models :')
+        # print(*models_names,sep='\n')
 
         predicitons_list = []
         for path in models_names:
@@ -157,32 +157,43 @@ class MacroMLModel(Model):
     def forecast(self,market_data,period:int):
         from math import ceil
 
-        first_idx = 12
-        if len(market_data)<12:
+        first_idx = 6
+
+        if len(market_data)<first_idx:
             first_idx = 0
-        real_percent = market_data.iloc[-2]/market_data.iloc[-first_idx]
+        real_percent = market_data.iloc[-1]/market_data.iloc[-first_idx]
         
         quarters = pd.DataFrame([market_data[-first_idx:].index.year,market_data[-first_idx:].index.map(get_quarter)]).T.drop_duplicates()
         model_percent = 1
+        print('\ncount model percent :')
         for i,v in quarters.iterrows():
             year_prec = self.macro_forecast_dict[v[0]]
             quarter_perc = year_prec**(1/4)
             model_percent *= quarter_perc
+            print(i, v[0],year_prec,quarter_perc , model_percent)
 
-        scale_c =abs((real_percent[0]-1)/ (model_percent-1))
+        scale_c =(real_percent[0]-1)/ (model_percent-1)
+
+        print( scale_c, real_percent[0], model_percent)
+
+        if scale_c<0 :
+            print('[WARN] negaive scale coef!')
         forecast_by_year_scaled = { k:scale_c*(v-1)+1  for k,v in self.macro_forecast_dict.items() }
+
+        print('\nPrice dynamics prediction:')
+        print(*forecast_by_year_scaled.items(),sep = '\n')
 
     #     prediction market
         market_quarter_df = get_quarter_from_dates(list(market_data.index))
 
-        prev_year = market_quarter_df.iloc[-1].year
         start_quarter_num = market_quarter_df.iloc[-1].quarter
-        start_quarter_date = datetime.datetime(year = prev_year,month = get_quarter_months(start_quarter_num)[0],day = 1)
+        start_quarter_date = datetime.datetime(year = market_quarter_df.iloc[-1].year,month = get_quarter_months(start_quarter_num)[0],day = 1)
         start_price = market_data.loc[start_quarter_date][0]
 
+        print('Quarter_data :',start_quarter_num,start_quarter_date,start_price)
 
         Q_period=  ceil(period/3)+1
-        Q_dt = [add_months(start_quarter_date,3*i) for i in range(0,Q_period+2)]
+        Q_dt = [add_months(start_quarter_date,3*i) for i in range(1,Q_period+1)]
         quarter_df = get_prev_quarter_from_dates(Q_dt)
         prediction_price_list = []
         
@@ -195,10 +206,13 @@ class MacroMLModel(Model):
 
             prediction_price_list.append(new_price)
             start_price = new_price
+
+        print(pd.DataFrame(prediction_price_list,index = quarter_df.index,columns=['price_sqm_forecast'])\
+                .reindex([add_months(quarter_df.index[0],i) for i in range(Q_period*3)]))
        
 
         return pd.DataFrame(prediction_price_list,index = quarter_df.index,columns=['price_sqm_forecast'])\
-                .reindex([add_months(quarter_df.index[0],i) for i in range(Q_period*3)])\
+                .reindex([add_months(quarter_df.index[0],i) for i in range(Q_period*3+1)])\
                 .interpolate()
         
     def predict(self,x):

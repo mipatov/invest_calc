@@ -212,7 +212,7 @@ class Calculator():
         #         and ABBREV_AO == @ao_name"
         
         market_data = self.market_data.query(qq)
-        # print(qq)
+        print(qq)
         # print('empty data -- ',market_data.empty)
         if market_data.empty:
             return market_data
@@ -331,14 +331,27 @@ class Calculator():
             print('[ERR] city is None!')
             return None
 
-        # print(data_filter)
+        city_name = None if city_name == '- Не выбран -' else city_name
+        names_dict = {
+            'city_name':city_name
+            ,'ao_name':ao_name
+            ,'raion_name':raion_name
+            ,'class_name':class_name
+        }
+        for key in names_dict:
+            if names_dict[key] == '- Не выбран -':
+                names_dict[key] = None
+
         market_data = self.get_market_data(city_name,ao_name,raion_name,class_name)
+        
         # пока выбрасываем август
         market_data = market_data[:-1]
 
-        diff = diff_month(market_data.index[-1],market_data.index[0])
-        new_idx = [add_months(market_data.index[0],i) for i in range(diff+1)]
-        market_data = market_data.reindex(new_idx).interpolate()
+
+        if len(market_data)>0:
+            diff = diff_month(market_data.index[-1],market_data.index[0])
+            new_idx = [add_months(market_data.index[0],i) for i in range(diff+1)]
+            market_data = market_data.reindex(new_idx).interpolate()
        
 
         if len(market_data)<6:

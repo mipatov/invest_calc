@@ -51,7 +51,6 @@ def get_city_list():
     return sorted(list(dct.keys()))
 
 def get_okrug_list(city):
-    print('!@#!@#!@',city)
     dct = read_regions_json()
     return sorted(list(dct[city].keys()))
 
@@ -253,10 +252,10 @@ def custom_object():
                                 else current_price
             ,'commiss_dt':commiss_dt
             ,'period':forecast_period
-            ,'city_name':city_name
-            ,'ao_name': ao_name if filter_checkboxes['okrug'] else None    
-            ,'raion_name': raion_name if filter_checkboxes['raion'] else None    
-            ,'class_name': class_name if filter_checkboxes['class'] else None   
+            ,'city_name':city_name if city_name != '- Не выбран -' else None   
+            ,'ao_name': ao_name if filter_checkboxes['okrug'] and ao_name != '- Не выбран -' else None    
+            ,'raion_name': raion_name if filter_checkboxes['raion'] and raion_name != '- Не выбран -' else None    
+            ,'class_name': class_name if filter_checkboxes['class'] and class_name != '- Не выбран -' else None   
         }
         forecast_df = calc.make_forecast_custom(**forecast_params)
         
