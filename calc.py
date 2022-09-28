@@ -9,8 +9,11 @@ class Calculator():
 
     def __init__(self, room_cnt = False,use_cache = False, regions_info_file  = 'regions/regions.info') -> None:
         self.room_cnt_flag = room_cnt
-        self.get_db_connections()
-        self.make_building_class_name_dict()
+        try :
+            self.get_db_connections()
+            self.make_building_class_name_dict()
+        except : 
+            print("[WARN] SOmething wrong. Mb cant connect to db")
         self.regions_info = read_json(regions_info_file)
 
         self.city = ""
@@ -74,9 +77,7 @@ class Calculator():
         from shapely import wkt
         from geopandas import GeoDataFrame
 
-
 #         sel_sql = POLYGONS_SQL
-
 #         df_polygons = pd.read_sql_query(sel_sql,self.ETL_CON)
         df_polygons = self.get_geo_data(city_name)
         
