@@ -46,7 +46,7 @@ class Calculator():
         path_name = self.regions_info[city_name]['path_name']
         path = f'regions/{path_name}/market_data.csv'
 
-        return  pd.read_csv(path)
+        return  pd.read_csv(path,index_col=0)
 
 
     def get_db_connections(self): 
@@ -161,31 +161,31 @@ class Calculator():
         gdf_quarters = gdf_quarters[OBJ_INFO_FIELDS]
         
         return gdf_quarters.iloc[0]
-    
 
-    def get_market_price_old(self,building_class_cd,district_name,room_cnt = -1):
-       
-        assert not self.room_cnt_flag or ( self.room_cnt_flag and room_cnt > 0) ,f'[WARN] Expected room_cnt value > 0, got {room_cnt}'
-            
-        if self.room_cnt_flag and room_cnt > 0 :
-            match_df = self.db_data.loc[(self.db_data['building_class_type'] == building_class_cd)
-                                        & (self.db_data['NAME'].str.contains(district_name))
-                                        & (self.db_data['room_cnt']  == room_cnt)]
-        if not self.room_cnt_flag or match_df.shape[0] ==0 :
-            if room_cnt > 0:
-                print('[WARN] Ignoring the entered room_cnt value!')
-
-            match_df = self.db_data.loc[(self.db_data['building_class_type'] == building_class_cd)
-                                        & (self.db_data['NAME'].str.contains(district_name))]
-        if match_df.shape[0] ==0 :
-            print('[WARN] Ignoring the building_class_type value!')
-            match_df = self.db_data.loc[self.db_data['NAME'].str.contains(district_name)]
-        if match_df.shape[0] ==0 :
-            print('[WARN] Nothing found !')
+    def find_housing_complex_cian(self,city_name, search_name):
+        from fuzzywuzzy import process
         
-        return match_df
+        if self.city != city_name:
+            self.city = city_name
+            self.market_data = self.load_market_data(city_name)
 
-    def get_market_data(self,city_name,ao_name=None,raion_name=None,cls_name=None, transport_accessibility = None,    ):
+        hc_df = self.market_data[['housing_complex_name','commissioning_date']].drop_duplicates()
+        
+        results = process.extract(search_name, hc_df.housing_complex_name)
+        print(results)
+        return hc_df.loc[[r[-1] for r in results ]]
+
+
+    def get_housing_complex_price_dynamics(self,city_name,hc_name,commissioning_date):
+        
+        if self.city != city_name:
+            self.city = city_name
+            self.market_data = self.load_market_data(city_name)
+
+        return price_line(self.market_data.query('advert_category_code == 3 and housing_complex_name == @hc_name and commissioning_date == @commissioning_date'),counts=True)
+
+
+    def get_market_data(self,city_name,ao_name=None,raion_name=None,cls_name=None, transport_accessibility = None,  exclude_hc_name = None, exclude_hc_comiss_dt = None   ):
         today_date = datetime.datetime.today().strftime("%Y-%m-%d")
         # print(today_date,ao_name,raion_name,cls_name)
         
@@ -206,12 +206,12 @@ class Calculator():
 
         if cls_name:
             qq+= " and building_class_name ==  @cls_name "
-        # else :
-        #     qq = "advert_category_code == 3 \
-        #         and commissioning_date <= @today_date\
-        #         and building_class_name ==  @cls_name\
-        #         and ABBREV_AO == @ao_name"
-        
+
+        if exclude_hc_name and exclude_hc_comiss_dt and exclude_hc_comiss_dt<datetime.datetime.today():
+            qq+= " and housing_complex_name !=  @exclude_hc_name "
+            qq+= " and housing_complex_name !=  @exclude_hc_comiss_dt "
+
+
         market_data = self.market_data.query(qq)
         print(qq)
         # print('empty data -- ',market_data.empty)
@@ -220,12 +220,6 @@ class Calculator():
         
         return price_line(market_data)
     
-    def get_price_of_similar_objects(self,obj_id,room_cnt = -1):
-        
-        obj_info = self.get_obj_info(obj_id)
-
-        return self.get_market_price_old(obj_info['building_class_type'],obj_info['NAME'],room_cnt)
-
     
     def get_current_price(self, obj_id):
         
@@ -257,68 +251,9 @@ class Calculator():
         df_cian_primary_market_raw =  self.db_data.query('advert_category_code == 3')
         df_eisgs_primary_market_raw =  pd.read_sql_query(EISGS_MARKET_DATA_SQL,self.ETL_CON)
     
-    
-    def make_forecast_by_obj_id(self,obj_id,forecast_period,price = -1):
-        market_df =  self.get_price_of_similar_objects(obj_id)
-        actual_date = None
-        if price>0 :
-            current_price = price 
-        else :
-            price_df = self.get_current_price(obj_id)
-            current_price = price_df['avg_price_sqm'][0]
-            actual_date = price_df['report_month_dt'][0]
-            print(f'[NOTE] Actual price for {actual_date} is {current_price}')
-        commis_date = self.get_commissioning_date(obj_id)
-        
-        return self._make_forecast(market_df,current_price,commis_date,forecast_period,actual_date=actual_date)
-    
-    
-    def make_forecast_for_custom_obj_old(self, building_class_cd,district_name,price,commis_date,forecast_period,room_cnt = -1,actual_date = None):
-        
-        market_df = self.get_market_price_old(building_class_cd,district_name,room_cnt)
-        return self._make_forecast(market_df,price,commis_date,forecast_period,room_cnt,actual_date)
-    
-    
-    def _make_forecast(self,market_data: pd.DataFrame,price,commis_date,forecast_period,room_cnt = -1,actual_date = None ):
-        from datetime import date,timedelta
-        self.check_connections()
-       
-        assert market_data.shape[0]==1, f'[WARN] Unable to match such objects! Got {market_data.shape[0]} lines in market data, expected 1.'
-        
-        
-        market_price = market_data['median_price_sqm_amt'].iloc[0]
 
-        actual_date = actual_date if actual_date else date.today().replace(day = 1) - timedelta(days=1)
 
-        current_price = price 
-        
-        if current_price > market_price:
-            print(f'current price =\t{current_price}\nmarket price =\t{market_price}\nNot stonks!')
-            return 0
-        
-        macro = DummyMacroModel(start_market_price = market_price,grow_rate = 1.013)
-        commis_period = (commis_date - actual_date).days//30
-
-        
-        commis_effect = float(pd.read_sql_query(COMMISSIONING_EFFECT_SQL,self.ETL_CON)['comissioning_effect'][0])
-
-        micro = CommisEffectLinearMicroModel(current_price,commis_effect,commis_period,macro)
-#         micro = MacroLikeMicroModel(current_price,commis_effect,commis_period,market_entry_period = 6,macro = macro)
-        
-        print('Stonks!')
-        
-        stonks_data = pd.DataFrame(index = range(forecast_period))
-        stonks_data['date'] = [add_months(actual_date,n)  for n in range(forecast_period)]
-        stonks_data['market'] = [macro(n)  for n in range(forecast_period)]
-        stonks_data['price'] = [micro(n)  for n in range(forecast_period)]
-        
-        annum_percent = percentage_per_annum(stonks_data['price'].iloc[0],stonks_data['price'].iloc[-1],forecast_period)
-        
-        print(f'You got {annum_percent:.2f}% per annum')
-        
-        return stonks_data 
-
-    def _make_forecast_new(self,market_data:pd.DataFrame,current_price,forecast_period,):
+    def _make_forecast(self,market_data:pd.DataFrame,current_price,forecast_period,):
         self.check_connections()
         path_name = self.regions_info[self.city]['path_name']
         folder_path = f'regions/{path_name}/'
@@ -327,23 +262,12 @@ class Calculator():
         return macro.market_forecast_df
         
 
-    def make_forecast_custom(self,current_price,commiss_dt,period=12,city_name = None,ao_name=None,raion_name=None,class_name=None):
+    def make_forecast_custom(self,current_price,commiss_dt,period=12,city_name = None,ao_name=None,raion_name=None,class_name=None,hc_name = None):
         if city_name is None:
             print('[ERR] city is None!')
             return None
 
-        city_name = None if city_name == '- Не выбран -' else city_name
-        names_dict = {
-            'city_name':city_name
-            ,'ao_name':ao_name
-            ,'raion_name':raion_name
-            ,'class_name':class_name
-        }
-        for key in names_dict:
-            if names_dict[key] == '- Не выбран -':
-                names_dict[key] = None
-
-        market_data = self.get_market_data(city_name,ao_name,raion_name,class_name)
+        market_data = self.get_market_data(city_name,ao_name,raion_name,class_name,exclude_hc_name=hc_name,exclude_hc_comiss_dt=commiss_dt)
         
         # пока выбрасываем август
         market_data = market_data[:-1]
@@ -359,22 +283,24 @@ class Calculator():
             print(f'Found {len(market_data)} months')
             return pd.DataFrame(columns=['price_sqm_amt','price_sqm_forecast','price_sqm_obj_forecast'])
 
-        # print(market_data)
-        # commiss_dt = commiss_dt.replace(day = 1)
+
         before_commiss_period = diff_month(commiss_dt, market_data.index[-1])+1
         forecast_period = max(period,before_commiss_period) 
 
         object_history = pd.DataFrame(columns=['price_sqm_obj_history'],index= market_data.index)
         object_advantage = 1 
-        print(current_price)
+       
         if type(current_price) is list :
+            current_price = current_price[:-1]
             object_history.iloc[-len(current_price):,0] =  current_price[-len(object_history):]
             current_price =  current_price[-1]
             k = (object_history['price_sqm_obj_history']/market_data["price_sqm_amt"]).median()
             if k>1:
                 object_advantage*=k
 
-        forecast_data =  self._make_forecast_new(market_data,current_price,forecast_period)
+        print('object_advantage',object_advantage)
+
+        forecast_data =  self._make_forecast(market_data,current_price,forecast_period)
 
         
         concat_market_and_forecast_df = pd.concat([market_data,forecast_data])
@@ -384,18 +310,22 @@ class Calculator():
         
         concat_market_and_forecast_df.loc[market_data.index[-1],'price_sqm_obj_forecast'] =  current_price
 
-        before_commiss_forecast_index = concat_market_and_forecast_df.loc[market_data.index[-1]:commiss_dt].index
-
-        delta =  market_data.iloc[-1,0]*object_advantage - current_price
-        delta_series = pd.Series(index= before_commiss_forecast_index)
-        delta_series[0] =  delta
-        delta_series[-1] =  0
-        delta_series =  delta_series.interpolate()
-
         concat_market_and_forecast_df.loc[commiss_dt:,'price_sqm_obj_forecast'] = \
                         concat_market_and_forecast_df.loc[commiss_dt:,'price_sqm_forecast']*object_advantage
-        concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_obj_forecast'] = \
-                         (concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_forecast']-delta_series)*object_advantage
+
+        before_commiss_forecast_index = concat_market_and_forecast_df.loc[market_data.index[-1]:commiss_dt].index
+
+        if before_commiss_period > 0:
+
+            delta =  market_data.iloc[-1,0]*object_advantage - current_price
+            delta_series = pd.Series(index= before_commiss_forecast_index)
+            delta_series[0] =  delta
+            delta_series[-1] =  0
+            delta_series =  delta_series.interpolate()
+
+            concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_obj_forecast'] = \
+                            (concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_forecast']-delta_series)*object_advantage
+        
         concat_market_and_forecast_df = concat_market_and_forecast_df.iloc[:len(market_data)+period]
         
     

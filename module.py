@@ -109,15 +109,29 @@ def get_gap_df(market_df,prmary_df,good_only = False):
         return gap_df[['gap','good']]
 
 
-def price_line(df):
+def price_line(df,counts = False):
+    if df.empty:
+        return None
     df.last_date = df.last_date.map(lambda x : str2dt(x[:10]))
-    ewm_df = df.groupby([(df.last_date.dt.year), (df.last_date.dt.month)]).median()[['price_sqm_amt']]
+    grp = df.groupby([(df.last_date.dt.year), (df.last_date.dt.month)])
+    ewm_df = grp.median()[['price_sqm_amt']]
+    if counts:
+        cnt_df = grp.count()[['price_sqm_amt']]
     try :
         ewm_df = ewm_df.drop((2021,4)).ewm(span=3).mean()
+        if counts:
+            cnt_df =cnt_df.drop((2021,4))
     except:
         ewm_df = ewm_df.ewm(span=3).mean()
     ewm_df.index = ewm_df.index.map(lambda idx: datetime.datetime(year= idx[0],month = idx[1],day = 1))
-    return ewm_df
+    if counts:
+        cnt_df.index = cnt_df.index.map(lambda idx: datetime.datetime(year= idx[0],month = idx[1],day = 1))
+
+        concat_df =  pd.concat([ewm_df,cnt_df], axis = 1)
+        concat_df.columns = ['price_sqm_amt','counts']
+        return concat_df
+    else: 
+        return ewm_df
 
 def str2dt(dt_str):
     return datetime.datetime.strptime(dt_str,'%Y-%m-%d')

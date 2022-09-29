@@ -119,6 +119,7 @@ title
       <div class="alert alert-info">
         Расположение: <b> {{ city }}{% if checkbox['okrug']  %}, {{ okrug }} {%endif%}{% if checkbox['raion']  %}, {{ raion }} {%endif%} </b><br>
         {% if checkbox['class']  %}  Класс: <b>{{ class_name}}</b><br> {%endif%}
+        {% if history_allow and checkbox['history'] %}ЖК : <b>{{housing_complex}}</b><br>{% endif %}
         Дата сдачи: <b>{{commiss_dt}}</b><br>
         Текущая цена: <b> {{current_price}}</b> руб/м2<br>
         Период прогноза: <b>{{forecast_period}}</b> мес.<br>

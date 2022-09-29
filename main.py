@@ -80,6 +80,7 @@ display_pagams = {
     ,'alert_visibility':'d-none'
     ,'plot_visibility':'d-none'
     ,'high_price_alert_visibility':'d-none'
+    ,'candidates_visibility':'d-none'
 }
 plot_param = {
     "plot_url":""
@@ -94,6 +95,7 @@ object_params = {
     ,"commiss_dt" : ""
     ,"current_price" : ""
     ,"forecast_period":""
+    ,'housing_complex':""
 }
 
 filter_checkboxes = {
@@ -103,6 +105,8 @@ filter_checkboxes = {
     ,'class': True
     ,'history':True
 }
+
+cian_hc_search_results = None
 
 def get_object_params():
     return object_params
@@ -154,7 +158,7 @@ def info():
                 return show_alert_info()
 
             price_dynamics = calc.get_price_dynamics(obj_id)
-            
+            price_dynamics = price_dynamics.reset_index().rename(columns={'avg_price_sqm': 'price_sqm_amt','contract_conclude_cnt':'counts'})
             obj_info_dct = {
                 "adress" :  obj_info['adress']
                 ,"housing_complex" :  obj_info['housing_complex']
@@ -171,8 +175,8 @@ def info():
             
             if not price_dynamics.empty :
                 last_price = price_dynamics.iloc[-1]
-                obj_info_dct['current_price'] = '{0:,}'.format(round(last_price['avg_price_sqm'])).replace(',', ' ')
-                obj_info_dct['contracts_cnt'] = last_price['contract_conclude_cnt']
+                obj_info_dct['current_price'] = '{0:,}'.format(round(last_price['price_sqm_amt'])).replace(',', ' ')
+                obj_info_dct['contracts_cnt'] = last_price['counts']
                 obj_info_dct['last_report_dt'] = last_price['report_month_dt']
        
             
@@ -190,6 +194,69 @@ def info():
     clear_object_params()
 
     return render_template('info.html' ,**plot_param, **display_pagams)
+
+
+
+@app.route('/housing_complex', methods=['GET','POST'])
+def housing_complex():
+    toggle_all_blocks(False)
+    if request.method == 'POST':
+        city_name = request.form['city-select']
+        hc_search_name = request.form['hc_name']
+
+        # hc_candidates_list = []      
+
+        if  not bool(request.form.get('hc-select')):                            
+            search_result = calc.find_housing_complex_cian(city_name,hc_search_name)
+            if search_result.empty:
+                toggle_block('alert_visibility',True)
+                return render_template('housing_complex.html',hc_name = hc_search_name
+                                        ,**display_pagams,**plot_param, **list_data_params )
+            search_result['description'] =search_result['housing_complex_name']+' (Сдача : '+search_result['commissioning_date']+')'
+            toggle_block('candidates_visibility',True)
+            print(search_result)
+            return render_template('housing_complex.html',hc_name = hc_search_name
+                                            ,candidates_list = [row for i,row in search_result.iterrows()]
+                                            ,city  = city_name
+                                            ,**display_pagams,**plot_param, **list_data_params )
+        else :
+            hc_selected_row = int(request.form['hc-select'])
+            toggle_block('obj_info_visibility',True)
+            hc_info = calc.market_data.loc[hc_selected_row]
+            price_dynamics = calc.get_housing_complex_price_dynamics(hc_info['region_name'],hc_info['housing_complex_name'],hc_info['commissioning_date'])
+            price_dynamics = price_dynamics.reset_index().rename(columns={'index': 'report_month_dt'})
+            obj_info_dct = {
+                "housing_complex" :  hc_info['housing_complex_name']
+                ,"city" : hc_info['region_name']
+                ,"okrug" : hc_info.get('district')
+                ,"raion" : hc_info.get('subdistrict')
+                ,"class_name" : hc_info['building_class_name']
+                ,"commiss_dt" : hc_info['commissioning_date']
+                ,'current_price': "--"
+                ,'last_report_dt': "--"
+                ,'price_dynamics' : price_dynamics
+            }
+            
+            if not price_dynamics.empty :
+                last_price = price_dynamics.iloc[-1]
+                obj_info_dct['current_price'] = '{0:,}'.format(round(last_price['price_sqm_amt'])).replace(',', ' ')
+                obj_info_dct['last_report_dt'] = str(last_price['report_month_dt'])[:10]
+       
+            
+                show_plot(price_dynamics_plot(price_dynamics))
+            obj_info_params.update(obj_info_dct)
+
+            return render_template('housing_complex.html',hc_name = hc_search_name
+                                            , **obj_info_dct
+                                            ,**display_pagams,**plot_param, **list_data_params )
+
+
+
+
+    return render_template('housing_complex.html'
+                            ,**list_data_params
+                             ,**plot_param,
+                              **display_pagams)
 
 
 @app.route('/forecast', methods=['GET','POST'])
@@ -242,12 +309,13 @@ def custom_object():
                     ,"commiss_dt" : datetime.strftime(commiss_dt,'%Y-%m-%d')
                     ,"current_price" : current_price
                     ,"forecast_period":forecast_period
+                    
                 }
         update_object_params(params) 
         
         trashhold = 0
         forecast_params = {
-            'current_price': remove_outliers_from_price_dinamics(trashhold)['avg_price_sqm'].to_list() \
+            'current_price': remove_outliers_from_price_dinamics(trashhold)['price_sqm_amt'].to_list() \
                                 if is_history_allow() and filter_checkboxes['history'] \
                                 else current_price
             ,'commiss_dt':commiss_dt
@@ -256,6 +324,7 @@ def custom_object():
             ,'ao_name': ao_name if filter_checkboxes['okrug'] and ao_name != '- Не выбран -' else None    
             ,'raion_name': raion_name if filter_checkboxes['raion'] and raion_name != '- Не выбран -' else None    
             ,'class_name': class_name if filter_checkboxes['class'] and class_name != '- Не выбран -' else None   
+            ,"hc_name":object_params['housing_complex']
         }
         forecast_df = calc.make_forecast_custom(**forecast_params)
         
@@ -290,10 +359,10 @@ def is_history_allow():
         
 def remove_outliers_from_price_dinamics(count_trashhold = 3):
     df  = obj_info_params['price_dynamics'].copy()
-    idx = df.query('contract_conclude_cnt < @count_trashhold').index
-    df.loc[idx,'avg_price_sqm'] = None
+    idx = df.query('counts < @count_trashhold').index
+    df.loc[idx,'price_sqm_amt'] = None
     # print(df)
-    df['avg_price_sqm'] = df['avg_price_sqm'].interpolate()
+    df['price_sqm_amt'] = df['price_sqm_amt'].interpolate()
     return df 
 
 def fill_obj_params_from_eisgs():
@@ -326,10 +395,10 @@ def price_dynamics_plot(price_dynamics_df):
     img = BytesIO()
     df = price_dynamics_df[:]
     df['report_month_dt']=df['report_month_dt'].map(lambda x : str(x)[:7])
-    ax = sns.barplot(data = df, x = 'report_month_dt',y='avg_price_sqm',color='seagreen')
+    ax = sns.barplot(data = df, x = 'report_month_dt',y='price_sqm_amt',color='seagreen')
     for i,val in enumerate(df.iterrows()):
         r, val = val
-        ax.annotate(val.contract_conclude_cnt,(i-0.25,val.avg_price_sqm+10),ha= 'center')
+        ax.annotate(val.counts,(i-0.25,val.price_sqm_amt+10),ha= 'center')
     plt.xlabel('')
     plt.ylabel('')
     plt.xticks(rotation=90)

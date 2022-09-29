@@ -195,7 +195,7 @@ class MacroMLModel(Model):
         Q_period=  ceil(period/3)+1
         Q_dt = [add_months(start_quarter_date,3*i) for i in range(1,Q_period+1)]
         quarter_df = get_prev_quarter_from_dates(Q_dt)
-        prediction_price_list = []
+        prediction_price_list = [start_price]
         
         
         for i,v in quarter_df.iterrows():
@@ -207,13 +207,15 @@ class MacroMLModel(Model):
             prediction_price_list.append(new_price)
             start_price = new_price
 
-        print(pd.DataFrame(prediction_price_list,index = quarter_df.index,columns=['price_sqm_forecast'])\
-                .reindex([add_months(quarter_df.index[0],i) for i in range(Q_period*3)]))
+        idx = [start_quarter_date ]+list(quarter_df.index)
+
+        forecast = pd.DataFrame(prediction_price_list,index = idx,columns=['price_sqm_forecast'])\
+                .reindex([add_months(idx[0],i) for i in range(Q_period*3+1)])
+
+        print(forecast)
        
 
-        return pd.DataFrame(prediction_price_list,index = quarter_df.index,columns=['price_sqm_forecast'])\
-                .reindex([add_months(quarter_df.index[0],i) for i in range(Q_period*3+1)])\
-                .interpolate()
+        return forecast.interpolate()
         
     def predict(self,x):
         return self.market_forecast.iloc[1,0]
