@@ -3,7 +3,7 @@ from flask import Flask, render_template, url_for,request, send_file
 from io import StringIO
 import psycopg2
 from dbcon import * 
-from module import percentage_per_annum
+from module import str2dt
 from calc import Calculator
 import matplotlib
 import matplotlib.pyplot as plt
@@ -159,6 +159,9 @@ def info():
 
             price_dynamics = calc.get_price_dynamics(obj_id)
             price_dynamics = price_dynamics.reset_index().rename(columns={'avg_price_sqm': 'price_sqm_amt','contract_conclude_cnt':'counts'})
+            price_dynamics['report_month_dt'] = price_dynamics['report_month_dt'].map(lambda x : str2dt(str(x)))
+            price_dynamics = price_dynamics.query('report_month_dt <= "2022-07-01"')
+
             obj_info_dct = {
                 "adress" :  obj_info['adress']
                 ,"housing_complex" :  obj_info['housing_complex']
@@ -166,7 +169,7 @@ def info():
                 ,"okrug" : obj_info['district']
                 ,"raion" : obj_info['subdistrict']
                 ,"class_name" : obj_info['building_class_name']
-                ,"commiss_dt" : obj_info['obj_comiss_dt']
+                ,"commiss_dt" : datetime.strftime(obj_info['obj_comiss_dt'],'%Y-%m-%d')
                 ,'current_price': "--"
                 ,'contracts_cnt': "--"
                 ,'last_report_dt': "--"
@@ -177,7 +180,7 @@ def info():
                 last_price = price_dynamics.iloc[-1]
                 obj_info_dct['current_price'] = '{0:,}'.format(round(last_price['price_sqm_amt'])).replace(',', ' ')
                 obj_info_dct['contracts_cnt'] = last_price['counts']
-                obj_info_dct['last_report_dt'] = last_price['report_month_dt']
+                obj_info_dct['last_report_dt'] = datetime.strftime(last_price['report_month_dt'],'%Y-%m-%d')
        
             
                 show_plot(price_dynamics_plot(price_dynamics))
@@ -225,6 +228,10 @@ def housing_complex():
             hc_info = calc.market_data.loc[hc_selected_row]
             price_dynamics = calc.get_housing_complex_price_dynamics(hc_info['region_name'],hc_info['housing_complex_name'],hc_info['commissioning_date'])
             price_dynamics = price_dynamics.reset_index().rename(columns={'index': 'report_month_dt'})
+
+            price_dynamics = price_dynamics.query('report_month_dt <= "2022-07-01"')
+
+
             obj_info_dct = {
                 "housing_complex" :  hc_info['housing_complex_name']
                 ,"city" : hc_info['region_name']
@@ -313,9 +320,9 @@ def custom_object():
                 }
         update_object_params(params) 
         
-        trashhold = 0
+        threshold = int(0.3* obj_info_params['price_dynamics']['counts'].median())
         forecast_params = {
-            'current_price': remove_outliers_from_price_dinamics(trashhold)['price_sqm_amt'].to_list() \
+            'current_price': prepare_price_dinamics(obj_info_params['price_dynamics'],threshold) \
                                 if is_history_allow() and filter_checkboxes['history'] \
                                 else current_price
             ,'commiss_dt':commiss_dt
@@ -357,13 +364,13 @@ def custom_object():
 def is_history_allow():
     return type(obj_info_params.get('price_dynamics') ) is type(pd.DataFrame()) and not obj_info_params.get('price_dynamics').empty
         
-def remove_outliers_from_price_dinamics(count_trashhold = 3):
-    df  = obj_info_params['price_dynamics'].copy()
-    idx = df.query('counts < @count_trashhold').index
+def prepare_price_dinamics(price_dynamics_df, count_threshold = 3):
+    df  = price_dynamics_df.copy()
+    idx = df.query('counts < @count_threshold').index
     df.loc[idx,'price_sqm_amt'] = None
-    # print(df)
+    # df.reindex()
     df['price_sqm_amt'] = df['price_sqm_amt'].interpolate()
-    return df 
+    return df[['report_month_dt','price_sqm_amt']].set_index('report_month_dt')['price_sqm_amt']
 
 def fill_obj_params_from_eisgs():
     if len(obj_info_params) == 0:
@@ -417,6 +424,7 @@ def price_forecast_plot(forecast_df,commiss_dt):
     ax.legend(labels = ['Факт рынка','Прогноз рынка','Прогноз объекта','Факт объекта'])
     number_format = lambda x : f'{x:,.0f}'.replace(",",' ')
     current_moment = forecast_df.price_sqm_amt.dropna().index[-1]
+    first_moment = forecast_df.price_sqm_forecast.dropna().index[0]
     last_moment = forecast_df.price_sqm_forecast.dropna().index[-1]
     plt.axvline(x=current_moment, color='g', linestyle='--')
     ax.annotate(str(current_moment)[:7],(current_moment,ax.get_ylim()[0]),ha= 'center')
@@ -426,7 +434,7 @@ def price_forecast_plot(forecast_df,commiss_dt):
     ax.annotate(number_format(forecast_df.price_sqm_obj_forecast[last_moment]),(last_moment,forecast_df.price_sqm_obj_forecast[last_moment]),ha= 'left')
 
 
-    if commiss_dt <= last_moment:
+    if commiss_dt <= last_moment and commiss_dt>=first_moment:
         plt.axvline(x=commiss_dt, color='r', linestyle='--')
         ax.annotate(str(commiss_dt)[:7],(commiss_dt,ax.get_ylim()[0]),ha= 'center')
         ax.annotate(number_format(forecast_df.price_sqm_obj_forecast[commiss_dt]),(commiss_dt,forecast_df.price_sqm_obj_forecast[commiss_dt]),ha= 'left')

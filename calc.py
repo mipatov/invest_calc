@@ -169,10 +169,10 @@ class Calculator():
             self.city = city_name
             self.market_data = self.load_market_data(city_name)
 
-        hc_df = self.market_data[['housing_complex_name','commissioning_date']].drop_duplicates()
+        hc_df = self.market_data.query('advert_category_code == 3')[['housing_complex_name','commissioning_date']].drop_duplicates()
         
         results = process.extract(search_name, hc_df.housing_complex_name)
-        print(results)
+        
         return hc_df.loc[[r[-1] for r in results ]]
 
 
@@ -185,8 +185,8 @@ class Calculator():
         return price_line(self.market_data.query('advert_category_code == 3 and housing_complex_name == @hc_name and commissioning_date == @commissioning_date'),counts=True)
 
 
-    def get_market_data(self,city_name,ao_name=None,raion_name=None,cls_name=None, transport_accessibility = None,  exclude_hc_name = None, exclude_hc_comiss_dt = None   ):
-        today_date = datetime.datetime.today().strftime("%Y-%m-%d")
+    def get_market_data(self,city_name,ao_name=None,raion_name=None,cls_name=None, transport_accessibility = None,  exclude_hc_name = None, exclude_hc_comiss_dt = None , today_date = None  ):
+        today_date = today_date if today_date else datetime.datetime.today().strftime("%Y-%m-%d")
         # print(today_date,ao_name,raion_name,cls_name)
         
         if self.city != city_name:
@@ -253,7 +253,7 @@ class Calculator():
     
 
 
-    def _make_forecast(self,market_data:pd.DataFrame,current_price,forecast_period,):
+    def _make_forecast(self,market_data:pd.DataFrame,forecast_period,):
         self.check_connections()
         path_name = self.regions_info[self.city]['path_name']
         folder_path = f'regions/{path_name}/'
@@ -270,7 +270,8 @@ class Calculator():
         market_data = self.get_market_data(city_name,ao_name,raion_name,class_name,exclude_hc_name=hc_name,exclude_hc_comiss_dt=commiss_dt)
         
         # пока выбрасываем август
-        market_data = market_data[:-1]
+
+        market_data = market_data.loc[:'2022-07-01']
 
 
         if len(market_data)>0:
@@ -278,8 +279,9 @@ class Calculator():
             new_idx = [add_months(market_data.index[0],i) for i in range(diff+1)]
             market_data = market_data.reindex(new_idx).interpolate()
        
+        threshold = 6
 
-        if len(market_data)<6:
+        if len(market_data)<threshold:
             print(f'Found {len(market_data)} months')
             return pd.DataFrame(columns=['price_sqm_amt','price_sqm_forecast','price_sqm_obj_forecast'])
 
@@ -290,17 +292,17 @@ class Calculator():
         object_history = pd.DataFrame(columns=['price_sqm_obj_history'],index= market_data.index)
         object_advantage = 1 
        
-        if type(current_price) is list :
-            current_price = current_price[:-1]
-            object_history.iloc[-len(current_price):,0] =  current_price[-len(object_history):]
-            current_price =  current_price[-1]
-            k = (object_history['price_sqm_obj_history']/market_data["price_sqm_amt"]).median()
+        if type(current_price) is pd.Series :
+            print(current_price)
+            print(current_price.reindex(market_data.index).to_list())
+            object_history['price_sqm_obj_history'] =  current_price.reindex(market_data.index).to_list()
+            current_price =  current_price.iloc[-1]
+            k = (object_history['price_sqm_obj_history'].iloc[-threshold:]/market_data["price_sqm_amt"]).median()
             if k>1:
                 object_advantage*=k
 
-        print('object_advantage',object_advantage)
 
-        forecast_data =  self._make_forecast(market_data,current_price,forecast_period)
+        forecast_data =  self._make_forecast(market_data,forecast_period)
 
         
         concat_market_and_forecast_df = pd.concat([market_data,forecast_data])
@@ -308,7 +310,6 @@ class Calculator():
         concat_market_and_forecast_df.loc[market_data.index[-1],'price_sqm_forecast'] =  market_data.iloc[-1,0]
 
         
-        concat_market_and_forecast_df.loc[market_data.index[-1],'price_sqm_obj_forecast'] =  current_price
 
         concat_market_and_forecast_df.loc[commiss_dt:,'price_sqm_obj_forecast'] = \
                         concat_market_and_forecast_df.loc[commiss_dt:,'price_sqm_forecast']*object_advantage
@@ -324,13 +325,49 @@ class Calculator():
             delta_series =  delta_series.interpolate()
 
             concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_obj_forecast'] = \
-                            (concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_forecast']-delta_series)*object_advantage
+                            (concat_market_and_forecast_df.loc[before_commiss_forecast_index,'price_sqm_forecast']*object_advantage-delta_series)
         
+        # concat_market_and_forecast_df.loc[market_data.index[-1],'price_sqm_obj_forecast'] =  current_price
         concat_market_and_forecast_df = concat_market_and_forecast_df.iloc[:len(market_data)+period]
         
-    
+        
         if not object_history.isnull().values.all():
             concat_market_and_forecast_df.loc[object_history.index,'price_sqm_obj_history'] =  object_history
     
     
+        return concat_market_and_forecast_df
+
+
+    def validate_market(self,city_name = None,ao_name=None,raion_name=None,class_name=None,hc_name = None,validate_period = 6):
+        if city_name is None:
+            print('[ERR] city is None!')
+            return None
+
+        validate_period = 6
+        prev_today_date =  add_months(datetime.datetime.today(),-validate_period)
+
+        market_data = self.get_market_data(city_name,ao_name,raion_name,class_name,today_date=prev_today_date.strftime("%Y-%m-%d"))
+        
+        # пока выбрасываем август
+        market_data = market_data[:-1]
+
+        if len(market_data)>0:
+            diff = diff_month(market_data.index[-1],market_data.index[0])
+            new_idx = [add_months(market_data.index[0],i) for i in range(diff+1)]
+            market_data = market_data.reindex(new_idx).interpolate()
+
+        prev_market_data  = market_data[:-validate_period]
+
+        threshold = 6
+
+        if len(market_data)<threshold:
+            print(f'Found only {len(market_data)} months of market data')
+            return pd.DataFrame(columns=['price_sqm_amt','price_sqm_forecast'])
+
+
+        forecast_data =  self._make_forecast(prev_market_data,validate_period)
+
+        concat_market_and_forecast_df = pd.concat([market_data,forecast_data],axis=1).iloc[:len(market_data)]
+
+       
         return concat_market_and_forecast_df

@@ -158,21 +158,30 @@ class MacroMLModel(Model):
         from math import ceil
 
         first_idx = 6
-
-        if len(market_data)<first_idx:
-            first_idx = 0
-        real_percent = market_data.iloc[-1]/market_data.iloc[-first_idx]
         
-        quarters = pd.DataFrame([market_data[-first_idx:].index.year,market_data[-first_idx:].index.map(get_quarter)]).T.drop_duplicates()
-        model_percent = 1
-        print('\ncount model percent :')
-        for i,v in quarters.iterrows():
-            year_prec = self.macro_forecast_dict[v[0]]
-            quarter_perc = year_prec**(1/4)
-            model_percent *= quarter_perc
-            print(i, v[0],year_prec,quarter_perc , model_percent)
+        for i in range(first_idx,1,-1):
+            if len(market_data)<i:
+                i = 0
+            real_percent = market_data.iloc[-1]/market_data.iloc[-i]
+            
+            quarters = pd.DataFrame([market_data[-i:].index.year,market_data[-i:].index.map(get_quarter)]).T.drop_duplicates()
+            model_percent = 1
+            print('\ncount model percent :')
+            for i,v in quarters.iterrows():
+                year_prec = self.macro_forecast_dict[v[0]]
+                quarter_perc = year_prec**(1/4)
+                model_percent *= quarter_perc
+                print(i, v[0],year_prec,quarter_perc , model_percent)
 
-        scale_c =(real_percent[0]-1)/ (model_percent-1)
+            scale_c =(real_percent[0]-1)/ (model_percent-1)
+
+            if scale_c > 0:
+                break
+
+        if scale_c < 0:
+                scale_c = 1
+                print('[WARN] Scale_c coeff is negative. Force set scale_c = 1')
+
 
         print( scale_c, real_percent[0], model_percent)
 
@@ -188,6 +197,8 @@ class MacroMLModel(Model):
 
         start_quarter_num = market_quarter_df.iloc[-1].quarter
         start_quarter_date = datetime.datetime(year = market_quarter_df.iloc[-1].year,month = get_quarter_months(start_quarter_num)[0],day = 1)
+        if(datetime.datetime.strftime(start_quarter_date,'%Y-%m-%d') == '2021-04-01'):
+            start_quarter_date = add_months(start_quarter_date,1)
         start_price = market_data.loc[start_quarter_date][0]
 
         print('Quarter_data :',start_quarter_num,start_quarter_date,start_price)
