@@ -320,7 +320,7 @@ def custom_object():
                 }
         update_object_params(params) 
         
-        threshold = int(0.3* obj_info_params['price_dynamics']['counts'].median())
+        threshold = int(0.3* obj_info_params['price_dynamics']['counts'].median()) if  type(obj_info_params.get('price_dynamics')) is pd.DataFrame else 0 
         forecast_params = {
             'current_price': prepare_price_dinamics(obj_info_params['price_dynamics'],threshold) \
                                 if is_history_allow() and filter_checkboxes['history'] \
