@@ -89,9 +89,9 @@ POLYGONS_SQL = '''
         '''
 
 OBJ_INFO_SQL = '''
-            select 	ao.obj_id 
-            		,ao.obj_addr adress
-            		, rd.city_nm region_name
+            select 	distinct  ao.obj_id 
+                    , ao.obj_addr adress 
+                    , replace(rf.region_short_desc ,'Город ','') region_name
                     , concat_ws(':', aop.obj_parcel_1, aop.obj_parcel_2, aop.obj_parcel_3) as quarter_cad_numb
                     , ao.obj_lk_latitude realty_latitude
                     , ao.obj_lk_longitude realty_longitude
@@ -100,8 +100,8 @@ OBJ_INFO_SQL = '''
                     , ao.obj_lk_class_cd building_class_type
                     , ao.obj_lk_class_desc building_class_name
             from emarti.act_obj ao 
-            	inner join dict.region_districts rd on ao.rpd_region_cd  = rd.rpd_region_cd 
-                left join emarti.act_obj_parcel aop on aop.obj_id = ao.obj_id
+                inner join dict.region_fias rf  on ao.rpd_region_cd  = rf.region_cd  
+    left join emarti.act_obj_parcel aop on aop.obj_id = ao.obj_id
             where ao.obj_id = {0} 
 '''
 

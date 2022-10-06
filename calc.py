@@ -130,6 +130,7 @@ class Calculator():
         self.code2cls_name = pd.read_sql_query(DCT_BUILDING_CLS_SQL,self.SSVD_CON).set_index('building_class_type').to_dict()['building_class_name']
         self.cls_name2code = {v:k for k,v in self.code2cls_name.items()}
 
+
     def get_obj_info(self, obj_id):
         from geopandas import GeoDataFrame, points_from_xy, sjoin
         
@@ -161,6 +162,7 @@ class Calculator():
         gdf_quarters = gdf_quarters[OBJ_INFO_FIELDS]
         
         return gdf_quarters.iloc[0]
+
 
     def find_housing_complex_cian(self,city_name, search_name):
         from fuzzywuzzy import process
@@ -213,12 +215,26 @@ class Calculator():
 
 
         market_data = self.market_data.query(qq)
-        print(qq)
-        # print('empty data -- ',market_data.empty)
+        
         if market_data.empty:
             return market_data
         
-        return price_line(market_data)
+        price_line_df = price_line(market_data)
+
+        idx = price_line_df.index
+
+        if price_line_df.empty:
+            return price_line_df
+
+        print('diff -> ',diff_month(idx[-1],idx[0]),' len -> ',len(idx))
+
+        if diff_month(idx[-1],idx[0])>len(idx):
+            new_idx = [add_months(idx[0],i) for i in range(diff_month(idx[-1],idx[0])+1)]
+            price_line_df = price_line_df.reindex(new_idx).interpolate()
+
+        print("price_line_df",price_line_df)
+
+        return price_line_df
     
     
     def get_current_price(self, obj_id):
@@ -273,12 +289,6 @@ class Calculator():
 
         market_data = market_data.loc[:'2022-07-01']
 
-
-        if len(market_data)>0:
-            diff = diff_month(market_data.index[-1],market_data.index[0])
-            new_idx = [add_months(market_data.index[0],i) for i in range(diff+1)]
-            market_data = market_data.reindex(new_idx).interpolate()
-       
         threshold = 6
 
         if len(market_data)<threshold:
@@ -346,22 +356,18 @@ class Calculator():
         validate_period = 6
         prev_today_date =  add_months(datetime.datetime.today(),-validate_period)
 
+        print('city : ',city_name,' ao : ',ao_name,' raion : ',raion_name, ' class : ',class_name)
         market_data = self.get_market_data(city_name,ao_name,raion_name,class_name,today_date=prev_today_date.strftime("%Y-%m-%d"))
         
         # пока выбрасываем август
         market_data = market_data[:-1]
 
-        if len(market_data)>0:
-            diff = diff_month(market_data.index[-1],market_data.index[0])
-            new_idx = [add_months(market_data.index[0],i) for i in range(diff+1)]
-            market_data = market_data.reindex(new_idx).interpolate()
-
         prev_market_data  = market_data[:-validate_period]
 
         threshold = 6
 
-        if len(market_data)<threshold:
-            print(f'Found only {len(market_data)} months of market data')
+        if len(prev_market_data)<threshold:
+            print(f'Found only {len(prev_market_data)} months of prev_market_data ')
             return pd.DataFrame(columns=['price_sqm_amt','price_sqm_forecast'])
 
 

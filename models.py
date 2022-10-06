@@ -166,12 +166,12 @@ class MacroMLModel(Model):
             
             quarters = pd.DataFrame([market_data[-i:].index.year,market_data[-i:].index.map(get_quarter)]).T.drop_duplicates()
             model_percent = 1
-            print('\ncount model percent :')
+            # print('\ncount model percent :')
             for i,v in quarters.iterrows():
                 year_prec = self.macro_forecast_dict[v[0]]
                 quarter_perc = year_prec**(1/4)
                 model_percent *= quarter_perc
-                print(i, v[0],year_prec,quarter_perc , model_percent)
+                # print(i, v[0],year_prec,quarter_perc , model_percent)
 
             scale_c =(real_percent[0]-1)/ (model_percent-1)
 
@@ -197,9 +197,9 @@ class MacroMLModel(Model):
 
         start_quarter_num = market_quarter_df.iloc[-1].quarter
         start_quarter_date = datetime.datetime(year = market_quarter_df.iloc[-1].year,month = get_quarter_months(start_quarter_num)[0],day = 1)
-        if(datetime.datetime.strftime(start_quarter_date,'%Y-%m-%d') == '2021-04-01'):
-            start_quarter_date = add_months(start_quarter_date,1)
-        start_price = market_data.loc[start_quarter_date][0]
+        if(datetime.datetime.strftime(start_quarter_date,'%Y-%m-%d') not in market_data.index):
+            start_quarter_date = add_months(start_quarter_date,3)
+        start_price = market_data.loc[datetime.datetime.strftime(start_quarter_date,'%Y-%m-%d')][0]
 
         print('Quarter_data :',start_quarter_num,start_quarter_date,start_price)
 
