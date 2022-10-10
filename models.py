@@ -136,7 +136,7 @@ class MacroMLModel(Model):
         for path in models_names:
             name = splitext(basename(path))[0]
             enabled_flag = config_dict[name]['enabled']
-            print(f'{name} eanbled is {enabled_flag}')
+            print(f'{name} enabled is {enabled_flag}')
             if not enabled_flag:
                 continue
             model = self.load_model(path)
@@ -153,25 +153,28 @@ class MacroMLModel(Model):
 
     def forecast(self, market_data, period: int):
         from math import ceil
-
-        first_idx = 6
+    
+        first_idx = 12
 
         for i in range(first_idx, 1, -1):
             if len(market_data) < i:
                 i = 0
-            real_percent = market_data.iloc[-1]/market_data.iloc[-i]
+
+            market_trend = lowess_trend(market_data.iloc[-i:].values)
+            
+            real_percent = market_trend[-1]/market_trend[0]
 
             quarters = pd.DataFrame(
                 [market_data[-i:].index.year, market_data[-i:].index.map(get_quarter)]).T.drop_duplicates()
+
             model_percent = 1
-            # print('\ncount model percent :')
+            
             for i, v in quarters.iterrows():
                 year_prec = self.macro_forecast_dict[v[0]]
                 quarter_perc = year_prec**(1/4)
                 model_percent *= quarter_perc
-                # print(i, v[0],year_prec,quarter_perc , model_percent)
 
-            scale_c = (real_percent[0]-1) / (model_percent-1)
+            scale_c = (real_percent-1) / (model_percent-1)
 
             if scale_c > 0:
                 break
@@ -180,7 +183,7 @@ class MacroMLModel(Model):
             scale_c = 1
             print('[WARN] Scale_c coeff is negative. Force set scale_c = 1')
 
-        print(scale_c, real_percent[0], model_percent)
+        print('scale_c = ',scale_c,' real% = ', real_percent,' model% = ', model_percent)
 
         if scale_c < 0:
             print('[WARN] negaive scale coef!')
@@ -188,6 +191,9 @@ class MacroMLModel(Model):
             k: scale_c*(v-1)+1 for k, v in self.macro_forecast_dict.items()}
 
         print('\nPrice dynamics prediction:')
+        print(*self.macro_forecast_dict.items(), sep='\n')
+
+        print(f'\nPrice dynamics prediction scale_c = {scale_c}:')
         print(*forecast_by_year_scaled.items(), sep='\n')
 
     #     prediction market

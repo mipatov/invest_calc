@@ -164,3 +164,28 @@ def read_json(path_to_json):
     with open(path_to_json, "rb") as f:
         x = json.load(f)
     return x
+
+
+def linear_trend(y):
+    from sklearn.linear_model import LinearRegression
+    import numpy as np
+
+    n = len(y)
+    X = np.arange(n).reshape(-1,1)
+    LR = LinearRegression().fit(X, y)
+    
+    y_trendline = LR.predict(X)
+    
+    return y_trendline
+    
+
+def lowess_trend(y,frac=1.0):
+    import statsmodels.api as sm
+    
+    y = y.reshape(-1)
+    n = len(y)
+    smoothed = sm.nonparametric.lowess(exog=range(n), endog=y, frac=frac)
+    
+    y_trendline = smoothed[:,1]
+    
+    return y_trendline
