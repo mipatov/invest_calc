@@ -131,13 +131,15 @@ OBJ_PRICE_DYNAMICS_SQL = '''
         '''
 
 DICT_CSL_CODE_EISGS2CIAN = {
-                                1:1,
-                                2:4,
-                                3:2,
-                                4:3
-                            }
-OBJ_KEY_FIELDS = ['region_name', 'district','subdistrict','building_class_type','building_class_name']
-OBJ_INFO_FIELDS = OBJ_KEY_FIELDS + ['adress', 'housing_complex','obj_comiss_dt']
+    1: 1,
+    2: 4,
+    3: 2,
+    4: 3
+}
+OBJ_KEY_FIELDS = ['region_name', 'district', 'subdistrict',
+                  'building_class_type', 'building_class_name']
+OBJ_INFO_FIELDS = OBJ_KEY_FIELDS + \
+    ['adress', 'housing_complex', 'obj_comiss_dt']
 
 
 INFL_SQL = '''
@@ -155,7 +157,7 @@ COMMISSIONING_DATE_SQL = '''
             where obj_id = {0}
         '''
 
-ALL_CIAN_MARKET_DATA_SQL =  '''
+ALL_CIAN_MARKET_DATA_SQL = '''
 select 	
 		aa.src_cian_id
         ,aa2.region_name
@@ -229,3 +231,23 @@ select building_class_type ,
 		building_class_name 
 from dl_cian.dct_building_class_actual dbcab 
 '''
+
+BUILDING_CLS_REL_DCT = {'бизнес': {'бизнес': 1.0,
+                                   'комфорт': 0.7644110275689223,
+                                   'премиум': 1.4897082635578043,
+                                   'эконом': 0.700015},
+                        'комфорт': {'бизнес': 1.3081967213114754,
+                                    'комфорт': 1.0,
+                                    'премиум': 1.8582298893495808,
+                                    'эконом': 0.9337426136061482},
+                        'премиум': {'бизнес': 0.6715010377086479,
+                                    'комфорт': 0.5383478554235742,
+                                    'премиум': 1.0,
+                                    'эконом': 0.5406067329148853},
+                        'эконом': {'бизнес': 1.4285408169824934,
+                                   'комфорт': 1.0709786184829664,
+                                   'премиум': 1.849852713759721,
+                                   'эконом': 1.0}}
+
+
+

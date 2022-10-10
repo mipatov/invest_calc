@@ -190,10 +190,11 @@ class Calculator():
             self.market_data = self.load_market_data(city_name)
             # print(self.market_data.columns)
 
-        # if data_filter:
+        
         qq = "advert_category_code == 3 \
-            and commissioning_date <= @today_date"
-        # if data_filter['city']
+            and commissioning_date <= @today_date\
+            and last_date > '2021-04-03'"
+        
         if ao_name and 'district' in self.market_data.columns:
             qq += " and district == @ao_name "
 
@@ -209,15 +210,30 @@ class Calculator():
 
         market_data = self.market_data.query(qq)
 
-        if market_data.empty:
-            return market_data
+
+        if market_data.shape[0] < 3:
+            print('[WARN] No such building class in this place. Calculate market from other classes.')
+            qq1 = qq.replace("and building_class_name ==  @cls_name",' ')
+            market_data = self.market_data.query(qq1)
+            print('get_market : ',market_data.head())
+
+            if market_data.shape[0] > 3:
+                market_data.price_sqm_amt = market_data.apply(lambda row : row.price_sqm_amt*BUILDING_CLS_REL_DCT[row.building_class_name][cls_name],axis=1)
+
+        if  market_data.shape[0] < 3:
+            print('[WARN] No data in this place! Get data from next level area.')
+            qq2 = qq.replace("and subdistrict == @raion_name",' ')
+            market_data = self.market_data.query(qq2)
+
+            # market_data.price_sqm_amt = market_data.apply(lambda row : row.price_sqm_amt*BUILDING_CLS_REL_DCT[row.building_class_name][cls_name],axis=1)
+
 
         price_line_df = price_line(market_data)
 
-        idx = price_line_df.index
-
         if price_line_df.empty:
             return price_line_df
+
+        idx = price_line_df.index
 
         print('diff -> ', diff_month(idx[-1], idx[0]), ' len -> ', len(idx))
 
