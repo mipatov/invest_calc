@@ -1,3 +1,4 @@
+from itsdangerous import json
 import psycopg2
 import pandas as pd
 from myconst import *
@@ -181,7 +182,9 @@ class Calculator():
 
         return price_line(self.market_data.query('advert_category_code == 3 and housing_complex_name == @hc_name and commissioning_date == @commissioning_date'), counts=True)
 
-    def get_market_data(self, city_name, ao_name=None, raion_name=None, cls_name=None, transport_accessibility=None,  exclude_hc_name=None, exclude_hc_comiss_dt=None, today_date=None):
+    def get_market_data(self, city_name, ao_name=None, raion_name=None, cls_name=None,
+                         transport_accessibility=None,  exclude_hc_name=None, exclude_hc_comiss_dt=None,
+                         today_date=None,threshold = 6):
         today_date = today_date if today_date else datetime.datetime.today().strftime("%Y-%m-%d")
         # print(today_date,ao_name,raion_name,cls_name)
 
@@ -190,11 +193,11 @@ class Calculator():
             self.market_data = self.load_market_data(city_name)
             # print(self.market_data.columns)
 
-        
         qq = "advert_category_code == 3 \
             and commissioning_date <= @today_date\
-            and last_date > '2021-04-03'"
-        
+            and last_date > '2021-04-03'\
+            and last_date < '2022-08-01'"
+
         if ao_name and 'district' in self.market_data.columns:
             qq += " and district == @ao_name "
 
@@ -209,40 +212,48 @@ class Calculator():
             qq += " and housing_complex_name !=  @exclude_hc_comiss_dt "
 
         market_data = self.market_data.query(qq)
-
-
-        if market_data.shape[0] < 3:
-            print('[WARN] No such building class in this place. Calculate market from other classes.')
-            qq1 = qq.replace("and building_class_name ==  @cls_name",' ')
-            market_data = self.market_data.query(qq1)
-            print('get_market : ',market_data.head())
-
-            if market_data.shape[0] > 3:
-                market_data.price_sqm_amt = market_data.apply(lambda row : row.price_sqm_amt*BUILDING_CLS_REL_DCT[row.building_class_name][cls_name],axis=1)
-
-        if  market_data.shape[0] < 3:
-            print('[WARN] No data in this place! Get data from next level area.')
-            qq2 = qq.replace("and subdistrict == @raion_name",' ')
-            market_data = self.market_data.query(qq2)
-
-            # market_data.price_sqm_amt = market_data.apply(lambda row : row.price_sqm_amt*BUILDING_CLS_REL_DCT[row.building_class_name][cls_name],axis=1)
-
-
         price_line_df = price_line(market_data)
 
-        if price_line_df.empty:
-            return price_line_df
+        if price_line_df is not None and not price_line_df.empty:
+            idx = price_line_df.index
+            if diff_month(idx[-1], idx[0]) > len(idx):
+                new_idx = [add_months(idx[0], i)
+                        for i in range(diff_month(idx[-1], idx[0])+1)]
+                price_line_df = price_line_df.reindex(new_idx).interpolate()
 
-        idx = price_line_df.index
 
-        print('diff -> ', diff_month(idx[-1], idx[0]), ' len -> ', len(idx))
+        if price_line_df is None or len(price_line_df)<threshold:
+            print('[WARN] No such building class in this area. Calculate market from other classes and areas of same level')
 
-        if diff_month(idx[-1], idx[0]) > len(idx):
-            new_idx = [add_months(idx[0], i)
-                       for i in range(diff_month(idx[-1], idx[0])+1)]
-            price_line_df = price_line_df.reindex(new_idx).interpolate()
+            path_name = self.regions_info[city_name]['path_name']
+            path = f'regions/{path_name}/relations.json'
+            relations_dict = read_json(path)
 
-        print("price_line_df", price_line_df)
+            market_data = price_convert(
+                self.market_data, relations_dict, class_name=cls_name, district=ao_name, subdistrict=raion_name)
+            print(market_data)
+            price_line_df = price_line(market_data)
+
+            if price_line_df is not None and not price_line_df.empty:
+                idx = price_line_df.index
+                if diff_month(idx[-1], idx[0]) > len(idx):
+                    new_idx = [add_months(idx[0], i)
+                            for i in range(diff_month(idx[-1], idx[0])+1)]
+                    price_line_df = price_line_df.reindex(new_idx).interpolate()
+
+
+        if price_line_df is None or len(price_line_df)<threshold:
+            print('[WARN] No data in this place! Get data from next level area.')
+            market_data = price_convert(
+                self.market_data, relations_dict, class_name=cls_name, district=ao_name)
+            price_line_df = price_line(market_data)
+
+            if price_line_df is not None and not price_line_df.empty:
+                idx = price_line_df.index
+                if diff_month(idx[-1], idx[0]) > len(idx):
+                    new_idx = [add_months(idx[0], i)
+                            for i in range(diff_month(idx[-1], idx[0])+1)]
+                    price_line_df = price_line_df.reindex(new_idx).interpolate()
 
         return price_line_df
 
@@ -291,16 +302,16 @@ class Calculator():
             print('[ERR] city is None!')
             return None
 
+        threshold = 6
         market_data = self.get_market_data(
-            city_name, ao_name, raion_name, class_name, exclude_hc_name=hc_name, exclude_hc_comiss_dt=commiss_dt)
+            city_name, ao_name, raion_name, class_name, exclude_hc_name=hc_name, exclude_hc_comiss_dt=commiss_dt,threshold = threshold)
 
         # пока выбрасываем август
 
-        market_data = market_data.loc[:'2022-07-01']
+        # market_data = market_data.loc[:'2022-07-01']
 
-        threshold = 6
 
-        if len(market_data) < threshold:
+        if market_data is None or len(market_data) < threshold:
             print(f'Found {len(market_data)} months')
             return pd.DataFrame(columns=['price_sqm_amt', 'price_sqm_forecast', 'price_sqm_obj_forecast'])
 

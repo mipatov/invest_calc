@@ -1,3 +1,4 @@
+from numpy import outer
 from myconst import *
 import pandas as pd
 import datetime
@@ -131,7 +132,7 @@ def get_gap_df(market_df, prmary_df, good_only=False):
 def price_line(df, counts=False):
     if df.empty:
         return None
-    df.last_date = df.last_date.map(lambda x: str2dt(x[:10]))
+    df.last_date = df.last_date.map(lambda x: str2dt(str(x)[:10]))
     grp = df.groupby([(df.last_date.dt.year), (df.last_date.dt.month)])
     ewm_df = grp.median()[['price_sqm_amt']]
     if counts:
@@ -171,21 +172,63 @@ def linear_trend(y):
     import numpy as np
 
     n = len(y)
-    X = np.arange(n).reshape(-1,1)
+    X = np.arange(n).reshape(-1, 1)
     LR = LinearRegression().fit(X, y)
-    
-    y_trendline = LR.predict(X)
-    
-    return y_trendline
-    
 
-def lowess_trend(y,frac=1.0):
+    y_trendline = LR.predict(X)
+
+    return y_trendline
+
+
+def lowess_trend(y, frac=1.0):
     import statsmodels.api as sm
-    
+
     y = y.reshape(-1)
     n = len(y)
     smoothed = sm.nonparametric.lowess(exog=range(n), endog=y, frac=frac)
-    
-    y_trendline = smoothed[:,1]
-    
+
+    y_trendline = smoothed[:, 1]
+
     return y_trendline
+
+
+def price_convert(data, relations, class_name, district, subdistrict=None):
+    area_query = "building_class_name == @class_name "
+    class_query = ""
+
+    if subdistrict:
+        print('convert price on subdistrict ----')
+
+        SUBDISTRICT_REL_DCT = relations['SUBDISTRICT_RELATIONS']
+
+        area_convert_price = data.query(area_query+" and district == @district ").apply(\
+            #                                 lambda row : print(row.district,row.subdistrict,subdistrict)\
+            lambda row: row.price_sqm_amt*SUBDISTRICT_REL_DCT[row.district][row.subdistrict][subdistrict], axis=1)
+        class_query = "subdistrict == @subdistrict"
+
+    elif district:
+        print(f'convert price on district ---- {district} -- {class_name}')
+        DISTRICT_REL_DCT = relations['DISTRICT_RELATIONS']
+        area_convert_price = data.query(area_query).apply(
+            lambda row: row.price_sqm_amt*DISTRICT_REL_DCT[row.district][district], axis=1)
+        class_query = "district == @district"
+
+    BUILDING_CLS_REL_DCT = relations['BUILDING_CLS_RELATIONS']
+    class_convert_price = data.query(class_query).apply(
+        lambda row: row.price_sqm_amt*BUILDING_CLS_REL_DCT[row.building_class_name][class_name], axis=1)
+
+    if area_convert_price.empty and class_convert_price.empty:
+        return area_convert_price
+
+    if area_convert_price.empty:
+        concated_price = class_convert_price
+    elif class_convert_price.empty:
+        concated_price = area_convert_price
+    else:
+        concated_price = pd.concat(
+            [class_convert_price, area_convert_price], join='outer', axis=0)
+
+    concated_price = concated_price[concated_price != 0].drop_duplicates()
+    filtered_df = data.loc[concated_price.index]
+    filtered_df['price_sqm_amt'] = concated_price
+    return filtered_df
