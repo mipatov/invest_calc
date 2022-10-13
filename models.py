@@ -191,8 +191,6 @@ class MacroMLModel(Model):
         forecast_by_year_scaled = {
             k: scale_c*(v-1)+1 for k, v in self.macro_forecast_dict.items()}
 
-        print('\nPrice dynamics prediction:')
-        print(*self.macro_forecast_dict.items(), sep='\n')
 
         print(f'\nPrice dynamics prediction scale_c = {scale_c}:')
         print(*forecast_by_year_scaled.items(), sep='\n')

@@ -352,8 +352,8 @@ class Calculator():
             market_data.index[-1]:commiss_dt].index
 
         if before_commiss_period > 0:
-
-            delta = market_data.iloc[-1, 0]*object_advantage - current_price
+            print('current_price',current_price,'object_advantage',object_advantage)
+            delta = trend_market_data.iloc[-1, 0]*object_advantage - current_price
             delta_series = pd.Series(index=before_commiss_forecast_index)
             delta_series[0] = delta
             delta_series[-1] = 0
@@ -368,12 +368,10 @@ class Calculator():
         concat_market_and_forecast_df.loc[market_data.index[-1],
                                           'price_sqm_forecast'] = trend_market_data.iloc[-1, 0]
 
-        concat_market_and_forecast_df = concat_market_and_forecast_df.iloc[:len(
-            market_data)+period]
+        concat_market_and_forecast_df = concat_market_and_forecast_df.iloc[:len(market_data)+period]
 
         if not object_history.isnull().values.all():
-            concat_market_and_forecast_df.loc[object_history.index,
-                                              'price_sqm_obj_history'] = object_history
+            concat_market_and_forecast_df.loc[object_history.index,'price_sqm_obj_history'] = object_history
 
         return concat_market_and_forecast_df
 
