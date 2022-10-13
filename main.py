@@ -274,7 +274,7 @@ def custom_object():
         current_price = re.sub(
             r"[^0-9]", "", request.form['current-price-input'])
 
-        filter_checkboxes['city'] = bool(request.form.get('city-check'))
+        filter_checkboxes['city'] = True
         filter_checkboxes['okrug'] = bool(request.form.get('okrug-check'))
         filter_checkboxes['raion'] = bool(request.form.get('raion-check'))
         filter_checkboxes['class'] = bool(request.form.get('class-check'))
@@ -419,7 +419,7 @@ def price_forecast_plot(forecast_df, commiss_dt):
     img = BytesIO()
     # sns.set_style("ticks",{'axes.grid' : True})
     ax = forecast_df.plot()
-    ax.legend(labels=['Факт рынка', 'Прогноз рынка',
+    ax.legend(labels=['Факт рынка','Тренд рынка', 'Прогноз рынка',
               'Прогноз объекта', 'Факт объекта'])
 
     def number_format(x): return f'{x:,.0f}'.replace(",", ' ')

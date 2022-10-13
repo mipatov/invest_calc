@@ -160,9 +160,10 @@ class MacroMLModel(Model):
             if len(market_data) < i:
                 i = 0
 
-            market_trend = lowess_trend(market_data.iloc[-i:].values)
-            
-            real_percent = market_trend[-1]/market_trend[0]
+            # market_trend = lowess_trend(market_data.iloc[-i:].values)
+            # real_percent = market_trend[-1]/market_trend[0]
+     
+            real_percent = market_data.iloc[-1,0]/market_data.iloc[0,0]
 
             quarters = pd.DataFrame(
                 [market_data[-i:].index.year, market_data[-i:].index.map(get_quarter)]).T.drop_duplicates()
