@@ -1,10 +1,10 @@
-from itsdangerous import json
-import psycopg2
 import pandas as pd
-from myconst import *
+import psycopg2
+
 from dbcon import *
 from models import *
 from module import *
+from myconst import *
 
 
 class Calculator():
@@ -12,28 +12,13 @@ class Calculator():
     def __init__(self, room_cnt=False, use_cache=False, regions_info_file='regions/regions.info') -> None:
         self.room_cnt_flag = room_cnt
         try:
-            self.get_db_connections()
             self.make_building_class_name_dict()
         except:
-            print("[WARN] SOmething wrong. Mb cant connect to db")
+            print("[WARN] Something wrong. Mb cant connect to db")
         self.regions_info = read_json(regions_info_file)
 
         self.city = ""
-        # cache_path = 'cache/db_data_cached.csv'
-        # cache_path = 'cache/historical_cian_last_advert_only_geo.csv'
 
-        # if room_cnt:
-        #     cache_path = 'cache/db_data_rooms_cached.csv'
-
-        # if use_cache:
-        #     self.db_data = pd.read_csv(cache_path,index_col = 0)
-        #     print('[INIT] Load cached data')
-        # else :
-        #     self.db_data = self.load_data()
-        #     print('[INIT] Data loaded successfuly')
-        #     self.db_data = self.preprocess_data(self.db_data)
-        #     print('[INIT] Data preprocessed successfuly')
-        #     self.db_data.to_csv(cache_path)
 
     def get_geo_data(self, city_name):
         import os.path
@@ -49,6 +34,36 @@ class Calculator():
         path = f'regions/{path_name}/market_data.csv'
 
         return pd.read_csv(path, index_col=0)
+
+    
+    def connect_db_etl(self):
+        try:
+            self.ETL_CON = psycopg2.connect(ETL_DSN)
+            print('[INIT] ETL DB connection successful')
+        except Exception as e:
+            print(e)
+            
+
+    def connect_db_ssvd(self):
+        try:
+            self.SSVD_CON = psycopg2.connect(SSVD_DSN)
+            print('[INFO] SSVD connection successful')
+        except Exception as e:
+            print(e)   
+
+    def close_db_etl(self):
+        try:
+            self.ETL_CON.close()         
+            print('[INFO] ETL connection closed')
+        except Exception as e:
+            print(e) 
+
+    def close_db_ssvd(self):
+        try:
+            self.SSVD_CON.close()         
+            print('[INFO] SSVD connection closed')
+        except Exception as e:
+            print(e)   
 
     def get_db_connections(self):
         try:
@@ -73,8 +88,8 @@ class Calculator():
             self.get_db_connections()
 
     def get_polygons(self, city_name):
-        from shapely import wkt
         from geopandas import GeoDataFrame
+        from shapely import wkt
 
 #         sel_sql = POLYGONS_SQL
 #         df_polygons = pd.read_sql_query(sel_sql,self.ETL_CON)
@@ -89,14 +104,14 @@ class Calculator():
         return gdf_polygons
 
     def load_data(self):
-        self.check_connections()
+        self.connect_db_etl()
         data = pd.read_sql_query(CIAN_LOAD_SQL, self.SSVD_CON)
-
+        self.close_db_etl()
         return data
 
     def preprocess_data(self, data):
-        from shapely import wkt
         from geopandas import GeoDataFrame, points_from_xy, sjoin
+        from shapely import wkt
 
         data.dropna(subset=['price_sqm_amt', 'room_cnt'], inplace=True)
 
@@ -122,17 +137,21 @@ class Calculator():
         return pivot_quarters
 
     def make_building_class_name_dict(self):
-        self.check_connections()
+        self.connect_db_ssvd()
         self.code2cls_name = pd.read_sql_query(DCT_BUILDING_CLS_SQL, self.SSVD_CON).set_index(
             'building_class_type').to_dict()['building_class_name']
         self.cls_name2code = {v: k for k, v in self.code2cls_name.items()}
+        self.close_db_ssvd()
+
 
     def get_obj_info(self, obj_id):
         from geopandas import GeoDataFrame, points_from_xy, sjoin
 
-        self.check_connections()
+        self.connect_db_etl()
         obj_info_query = OBJ_INFO_SQL.format(obj_id)
         df_obj = pd.read_sql_query(obj_info_query, self.ETL_CON)
+
+        self.close_db_etl()
 
         if df_obj.empty:
 
@@ -160,6 +179,7 @@ class Calculator():
 
         return gdf_quarters.iloc[0]
 
+    
     def find_housing_complex_cian(self, city_name, search_name):
         from fuzzywuzzy import process
 
@@ -174,6 +194,7 @@ class Calculator():
 
         return hc_df.loc[[r[-1] for r in results]]
 
+    
     def get_housing_complex_price_dynamics(self, city_name, hc_name, commissioning_date):
 
         if self.city != city_name:
@@ -182,16 +203,15 @@ class Calculator():
 
         return price_line(self.market_data.query('advert_category_code == 3 and housing_complex_name == @hc_name and commissioning_date == @commissioning_date'), counts=True)
 
+    
     def get_market_data(self, city_name, ao_name=None, raion_name=None, cls_name=None,
                         transport_accessibility=None,  exclude_hc_name=None, exclude_hc_comiss_dt=None,
                         today_date=None, threshold=6):
         today_date = today_date if today_date else datetime.datetime.today().strftime("%Y-%m-%d")
-        # print(today_date,ao_name,raion_name,cls_name)
 
         if self.city != city_name:
             self.city = city_name
             self.market_data = self.load_market_data(city_name)
-            # print(self.market_data.columns)
 
         qq = "advert_category_code == 3 \
             and commissioning_date <= @today_date\
@@ -230,7 +250,7 @@ class Calculator():
 
             market_data = price_convert(
                 self.market_data, relations_dict, class_name=cls_name, district=ao_name, subdistrict=raion_name)
-            print(market_data)
+
             price_line_df = price_line(market_data)
 
             if price_line_df is not None and not price_line_df.empty:
@@ -264,32 +284,16 @@ class Calculator():
         return price_df
 
     def get_price_dynamics(self, obj_id):
-        self.check_connections()
+        self.connect_db_etl()
 
         query = OBJ_PRICE_DYNAMICS_SQL.format(obj_id)
         price_dynamics_df = pd.read_sql_query(query, self.ETL_CON)
-
+        self.close_db_etl()
+        
         return price_dynamics_df
 
-    def get_commissioning_date(self, obj_id):
-        self.check_connections()
-        obj_commissioning_date_sql = COMMISSIONING_DATE_SQL.format(obj_id)
-        commissioning_date = pd.read_sql_query(
-            obj_commissioning_date_sql, self.ETL_CON)
-
-        return commissioning_date.iloc[0][0]
-
-    def get_comissionin_effect(self, building_class_cd, district_name):
-        self.check_connections()
-        df_secondary_market_raw = self.db_data.query(
-            'advert_category_code == 1')
-        df_cian_primary_market_raw = self.db_data.query(
-            'advert_category_code == 3')
-        df_eisgs_primary_market_raw = pd.read_sql_query(
-            EISGS_MARKET_DATA_SQL, self.ETL_CON)
 
     def _make_forecast(self, market_data: pd.DataFrame, forecast_period,):
-        self.check_connections()
         path_name = self.regions_info[self.city]['path_name']
         folder_path = f'regions/{path_name}/'
         macro = MacroMLModel(market_data, forecast_period,
@@ -352,7 +356,7 @@ class Calculator():
             market_data.index[-1]:commiss_dt].index
 
         if before_commiss_period > 0:
-            print('current_price',current_price,'object_advantage',object_advantage)
+            # print('current_price',current_price,'object_advantage',object_advantage)
             delta = trend_market_data.iloc[-1, 0]*object_advantage - current_price
             delta_series = pd.Series(index=before_commiss_forecast_index)
             delta_series[0] = delta
@@ -383,6 +387,7 @@ class Calculator():
         validate_period = 6
         prev_today_date = add_months(
             datetime.datetime.today(), -validate_period)
+        
 
         print('city : ', city_name, ' ao : ', ao_name,
               ' raion : ', raion_name, ' class : ', class_name)
@@ -390,9 +395,16 @@ class Calculator():
             city_name, ao_name, raion_name, class_name, today_date=prev_today_date.strftime("%Y-%m-%d"))
 
         # пока выбрасываем август
-        market_data = market_data[:-1]
+        market_data = market_data.loc[:'2022-07-01']
 
-        prev_market_data = market_data[:-validate_period]
+        trend_market_data = market_data.copy()
+        trend_market_data.price_sqm_amt = lowess_trend(
+            market_data.price_sqm_amt.values)
+        trend_market_data = trend_market_data.rename(
+            columns={'price_sqm_amt': 'price_sqm_trend'})
+
+
+        prev_market_data = trend_market_data[:-validate_period]
 
         threshold = 6
 
@@ -404,6 +416,6 @@ class Calculator():
         forecast_data = self._make_forecast(prev_market_data, validate_period)
 
         concat_market_and_forecast_df = pd.concat(
-            [market_data, forecast_data], axis=1).iloc[:len(market_data)]
+            [market_data,trend_market_data, forecast_data], axis=1).iloc[:len(trend_market_data)]
 
         return concat_market_and_forecast_df

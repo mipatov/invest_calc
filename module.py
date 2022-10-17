@@ -1,8 +1,9 @@
-from numpy import outer
-from myconst import *
-import pandas as pd
-import datetime
 import calendar
+import datetime
+
+import pandas as pd
+
+from myconst import *
 
 
 def get_quarter(date):
@@ -55,8 +56,8 @@ def percentage_per_annum(start_price, final_price, months_period):
 
 
 def get_polygons():
-    from shapely import wkt
     from geopandas import GeoDataFrame
+    from shapely import wkt
 
     sel_sql = POLYGONS_SQL
 
@@ -71,8 +72,8 @@ def get_polygons():
 
 
 def get_geodf(df, cords_col_name=['realty_longitude', 'realty_latitude']):
-    from shapely import wkt
     from geopandas import GeoDataFrame, points_from_xy, sjoin
+    from shapely import wkt
 
     geo_data = GeoDataFrame(df, crs='epsg:4326',
                             geometry=points_from_xy(df[cords_col_name[0]],
@@ -168,8 +169,8 @@ def read_json(path_to_json):
 
 
 def linear_trend(y):
-    from sklearn.linear_model import LinearRegression
     import numpy as np
+    from sklearn.linear_model import LinearRegression
 
     n = len(y)
     X = np.arange(n).reshape(-1, 1)
@@ -202,7 +203,6 @@ def price_convert(data, relations, class_name, district, subdistrict=None):
         SUBDISTRICT_REL_DCT = relations['SUBDISTRICT_RELATIONS']
 
         area_convert_price = data.query(area_query+" and district == @district ").apply(\
-            #                                 lambda row : print(row.district,row.subdistrict,subdistrict)\
             lambda row: row.price_sqm_amt*SUBDISTRICT_REL_DCT[row.district][row.subdistrict][subdistrict], axis=1)
         class_query = "subdistrict == @subdistrict"
 

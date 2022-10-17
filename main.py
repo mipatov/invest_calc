@@ -1,18 +1,19 @@
-from datetime import datetime
-from flask import Flask, render_template, url_for, request, send_file
-from io import StringIO
-import psycopg2
-from dbcon import *
-from module import str2dt
-from calc import Calculator
-import matplotlib
-import matplotlib.pyplot as plt
-from io import BytesIO
 import base64
-import seaborn as sns
-import pandas as pd
 import re
 import warnings
+from datetime import datetime
+from io import BytesIO
+
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from flask import Flask, render_template, request
+
+from calc import Calculator
+from dbcon import *
+from module import str2dt
+
 warnings.filterwarnings('ignore')
 
 matplotlib.use('Agg')
@@ -320,10 +321,10 @@ def custom_object():
                                 else current_price
             ,'commiss_dt':commiss_dt
             ,'period':forecast_period
-            ,'city_name':city_name if city_name != '- Не выбран -' else None   
-            ,'ao_name': ao_name if filter_checkboxes['okrug'] and ao_name != '- Не выбран -' else None    
-            ,'raion_name': raion_name if filter_checkboxes['raion'] and raion_name != '- Не выбран -' else None    
-            ,'class_name': class_name if filter_checkboxes['class'] and class_name != '- Не выбран -' else None   
+            ,'city_name':city_name if city_name.strip() != '- Не выбран -' else None   
+            ,'ao_name': ao_name if filter_checkboxes['okrug'] and ao_name.strip() != '- Не выбран -' else None    
+            ,'raion_name': raion_name if filter_checkboxes['raion'] and raion_name.strip() != '- Не выбран -' else None    
+            ,'class_name': class_name if filter_checkboxes['class'] and class_name.strip() != '- Не выбран -' else None   
             ,"hc_name":object_params['housing_complex']
         }
         forecast_df = calc.make_forecast_custom(**forecast_params)
@@ -334,12 +335,10 @@ def custom_object():
             print('[WARN] Found no data!')
             toggle_block('alert_visibility', True)
         else:
-            # annum_percent = percentage_per_annum(forecast_df.price_sqm_obj_forecast.dropna().iloc[0],forecast_df.price_sqm_obj_forecast.iloc[-1],forecast_period)
             percent = (-1+forecast_df.price_sqm_obj_forecast.iloc[-1] /
                        forecast_df.price_sqm_obj_forecast.dropna().iloc[0]) * 100
             plot_param['percent'] = f"{percent:.2f}"
             plot_param['out_df'] = forecast_df
-            # print(forecast_df)
             show_plot(price_forecast_plot(forecast_df, commiss_dt))
             check_high_price(forecast_df)
 

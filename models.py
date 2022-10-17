@@ -1,6 +1,4 @@
 from datetime import datetime
-from json import load
-import numpy as np
 
 from module import *
 
@@ -20,79 +18,6 @@ class Model():
 
     def predict(self, x):
         return x
-
-
-class LinearModel(Model):
-
-    def __init__(self, start_value, k) -> None:
-        self.start_value = start_value
-        self.k = k
-
-    def predict(self, x):
-        return self.start_value+self.k*x
-
-
-class LinearMicroModel(LinearModel):
-
-    def __init__(self, start_value, commis_period: int, macro: Model) -> None:
-        k = (macro(commis_period)-start_value)/commis_period
-        super().__init__(start_value, k)
-        self.commis_period = commis_period
-        self.macro = macro
-
-    def predict(self, x):
-        return super().predict(x) if x < self.commis_period else self.macro(x)
-
-
-class CommisEffectLinearMicroModel(LinearModel):
-
-    def __init__(self, start_value, commis_effect, commis_period, macro: Model) -> None:
-        k = (macro(commis_period)/(1+commis_effect)-start_value)/commis_period
-        super().__init__(start_value, k)
-        self.commis_period = commis_period
-        self.macro = macro
-
-    def predict(self, x):
-        return super().predict(x) if x < self.commis_period else self.macro(x)
-
-
-class MacroLikeMicroModel(LinearModel):
-
-    def __init__(self, start_value, commis_effect, commis_period, market_entry_period, macro: Model) -> None:
-        macroLike = macro.copy()
-        macroLike.start_market_price = start_value
-
-        self.macroLike = macroLike
-        self.commis_effect = commis_effect
-        self.commis_period = commis_period
-        self.market_entry_period = market_entry_period
-        self.macro = macro
-
-        linear_start_value = macroLike(commis_period)*(1+commis_effect)
-        k = (macro(commis_period+market_entry_period) -
-             linear_start_value)/market_entry_period
-        super().__init__(linear_start_value, k)
-
-    def predict(self, x):
-        if x < self.commis_period:
-            return self.macroLike(x)
-        if x == self.commis_period:
-            return self.macroLike(x)*(1+self.commis_effect)
-        if x > self.commis_period and x < self.market_entry_period:
-            return super().predict(x)
-        if x >= self.market_entry_period:
-            return self.macro(x)
-
-
-class DummyMacroModel(Model):
-
-    def __init__(self, start_market_price, grow_rate, infl_rate=0) -> None:
-        self.start_market_price = start_market_price
-        self.grow_rate = grow_rate
-        self.infl_rate = infl_rate
-
-    def predict(self, x):
-        return self.start_market_price*pow(self.grow_rate, x)
 
 
 class MacroMLModel(Model):
@@ -118,9 +43,9 @@ class MacroMLModel(Model):
         return data
 
     def get_macro_forecast(self):
-        from os import listdir
-        from os.path import isfile, join, splitext, basename
         import json
+        from os import listdir
+        from os.path import basename, isfile, join, splitext
 
         models_names = [join(self.models_folder_path, f) for f in listdir(
             self.models_folder_path) if splitext(f)[-1] == '.pkl']
@@ -192,8 +117,8 @@ class MacroMLModel(Model):
             k: scale_c*(v-1)+1 for k, v in self.macro_forecast_dict.items()}
 
 
-        print(f'\nPrice dynamics prediction scale_c = {scale_c}:')
-        print(*forecast_by_year_scaled.items(), sep='\n')
+        # print(f'\nPrice dynamics prediction scale_c = {scale_c}:')
+        # print(*forecast_by_year_scaled.items(), sep='\n')
 
     #     prediction market
         market_quarter_df = get_quarter_from_dates(list(market_data.index))
@@ -229,7 +154,7 @@ class MacroMLModel(Model):
         forecast = pd.DataFrame(prediction_price_list, index=idx, columns=['price_sqm_forecast'])\
             .reindex([add_months(idx[0], i) for i in range(Q_period*3+1)])
 
-        print(forecast)
+        # print(forecast)
 
         return forecast.interpolate()
 
