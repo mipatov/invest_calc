@@ -77,7 +77,8 @@ object_params = {
     "commiss_dt": "",
     "current_price": "",
     "forecast_period": "",
-    'housing_complex': ""
+    'housing_complex': "",
+    'indexes':{}
 }
 
 filter_checkboxes = {
@@ -139,7 +140,7 @@ def index():
 def info():
     toggle_all_blocks(False)
     if request.method == 'POST':
-        obj_id = request.form['input_id']
+        obj_id = request.form['input_id'].strip()
         if obj_id.isdigit():
             obj_info = calc.get_obj_info(obj_id)
             if obj_info.shape[0] == 0:
@@ -162,6 +163,11 @@ def info():
                 "raion": obj_info['subdistrict'], 
                 "class_name": obj_info['building_class_name'], 
                 "commiss_dt": datetime.strftime(obj_info['obj_comiss_dt'], '%Y-%m-%d'), 
+                "indexes":{
+                        "infrastructure_index": obj_info['hobj_infrastructure_index'],
+                        "transport_dist_index": obj_info['hobj_transport_dist_index_value'],
+                        "air_quality_index": obj_info['hobj_air_quality_index']
+                        },
                 'current_price': "--", 
                 'contracts_cnt': "--", 
                 'last_report_dt': "--", 
@@ -310,8 +316,7 @@ def custom_object():
         }
         update_object_params(params)
         try:
-            threshold = int(
-                0.3 * obj_info_params['price_dynamics']['counts'].median())
+            threshold = int(0.3 * obj_info_params['price_dynamics']['counts'].median())
         except:
             threshold = 0
 
@@ -326,6 +331,7 @@ def custom_object():
             ,'raion_name': raion_name if filter_checkboxes['raion'] and raion_name.strip() != '- Не выбран -' else None    
             ,'class_name': class_name if filter_checkboxes['class'] and class_name.strip() != '- Не выбран -' else None   
             ,"hc_name":object_params['housing_complex']
+            ,'indexes':object_params['indexes']
         }
         forecast_df = calc.make_forecast_custom(**forecast_params)
 
@@ -415,13 +421,23 @@ def price_dynamics_plot(price_dynamics_df):
 
 
 def price_forecast_plot(forecast_df, commiss_dt):
+    import numpy as np
+    from sklearn.metrics import mean_squared_error
+
     img = BytesIO()
     # sns.set_style("ticks",{'axes.grid' : True})
     ax = forecast_df.plot()
     ax.legend(labels=['Факт рынка','Тренд рынка', 'Прогноз рынка',
               'Прогноз объекта', 'Факт объекта'])
+    
+    # err = mean_squared_error(forecast_df.loc[:,'price_sqm_amt'].dropna(),forecast_df.loc[:,'price_sqm_trend'].dropna(),squared=False)
+    # # err = 1.96 * np.std(forecast_df.loc[:,'price_sqm_trend'].dropna())/np.sqrt(len(forecast_df.loc[:,'price_sqm_trend'].dropna()))
+    # ax.fill_between(forecast_df.index, (forecast_df['price_sqm_forecast'].values-err), (forecast_df['price_sqm_forecast'].values+err), color='g', alpha=.1)    
+    # ax.fill_between(forecast_df.index, (forecast_df['price_sqm_trend'].values-err), (forecast_df['price_sqm_trend'].values+err), color='orange', alpha=.1)    
+
 
     def number_format(x): return f'{x:,.0f}'.replace(",", ' ')
+
     current_moment = forecast_df.price_sqm_amt.dropna().index[-1]
     first_moment = forecast_df.price_sqm_forecast.dropna().index[0]
     last_moment = forecast_df.price_sqm_forecast.dropna().index[-1]

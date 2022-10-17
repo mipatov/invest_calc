@@ -168,7 +168,7 @@ def read_json(path_to_json):
     return x
 
 
-def linear_trend(y):
+def linear_trend(y,coef):
     import numpy as np
     from sklearn.linear_model import LinearRegression
 

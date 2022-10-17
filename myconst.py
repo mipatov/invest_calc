@@ -90,18 +90,22 @@ POLYGONS_SQL = '''
 
 OBJ_INFO_SQL = '''
             select 	distinct  ao.obj_id 
-                    , ao.obj_addr adress 
-                    , replace(rf.region_short_desc ,'Город ','') region_name
-                    , concat_ws(':', aop.obj_parcel_1, aop.obj_parcel_2, aop.obj_parcel_3) as quarter_cad_numb
-                    , ao.obj_lk_latitude realty_latitude
-                    , ao.obj_lk_longitude realty_longitude
-                    , ao.obj_pool_nm housing_complex
-                    , ao.obj_comiss_dt 
-                    , ao.obj_lk_class_cd building_class_type
-                    , ao.obj_lk_class_desc building_class_name
-            from emarti.act_obj ao 
-                inner join dict.region_fias rf  on ao.rpd_region_cd  = rf.region_cd  
-    left join emarti.act_obj_parcel aop on aop.obj_id = ao.obj_id
+                            , ao.obj_addr adress 
+                            , replace(rf.region_short_desc ,'Город ','') region_name
+                            , concat_ws(':', aop.obj_parcel_1, aop.obj_parcel_2, aop.obj_parcel_3) as quarter_cad_numb
+                                    , ao.obj_lk_latitude realty_latitude
+                                    , ao.obj_lk_longitude realty_longitude
+                                    , ao.obj_pool_nm housing_complex
+                                    , ao.obj_comiss_dt 
+                                    , ao.obj_lk_class_cd building_class_type
+                                    , ao.obj_lk_class_desc building_class_name
+                                    , po.hobj_infrastructure_index 
+                                    , po.hobj_transport_dist_index_value 
+                                    , po.hobj_air_quality_index 
+                            from emarti.act_obj ao 
+                                inner join dict.region_fias rf  on ao.rpd_region_cd  = rf.region_cd  
+                                inner join emart.portal_obj po on ao.obj_id = po.obj_id 
+                    left join emarti.act_obj_parcel aop on aop.obj_id = ao.obj_id
             where ao.obj_id = {0} 
 '''
 
@@ -139,7 +143,7 @@ DICT_CSL_CODE_EISGS2CIAN = {
 OBJ_KEY_FIELDS = ['region_name', 'district', 'subdistrict',
                   'building_class_type', 'building_class_name']
 OBJ_INFO_FIELDS = OBJ_KEY_FIELDS + \
-    ['adress', 'housing_complex', 'obj_comiss_dt']
+    ['adress', 'housing_complex', 'obj_comiss_dt','hobj_infrastructure_index','hobj_transport_dist_index_value','hobj_air_quality_index']
 
 
 INFL_SQL = '''

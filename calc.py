@@ -301,14 +301,19 @@ class Calculator():
 
         return macro.market_forecast_df
 
-    def make_forecast_custom(self, current_price, commiss_dt, period=12, city_name=None, ao_name=None, raion_name=None, class_name=None, hc_name=None):
+    def make_forecast_custom(self, current_price, commiss_dt, period=12, city_name=None, ao_name=None, raion_name=None, class_name=None, hc_name=None, indexes = {}):
         if city_name is None:
             print('[ERR] city is None!')
             return None
 
+        # print(indexes)
+
+        
+
         threshold = 6
         market_data = self.get_market_data(
-            city_name, ao_name, raion_name, class_name, exclude_hc_name=hc_name, exclude_hc_comiss_dt=commiss_dt, threshold=threshold)
+            city_name, ao_name, raion_name, class_name, exclude_hc_name=hc_name, exclude_hc_comiss_dt=commiss_dt, threshold=threshold,
+            today_date='2022-08-01')
 
         # пока выбрасываем август
         market_data = market_data.loc[:'2022-07-01']
@@ -343,14 +348,29 @@ class Calculator():
 
         forecast_data = self._make_forecast(trend_market_data, forecast_period)
 
+        indexes_coef = 1
+        if len(indexes)>0:
+            path_name = self.regions_info[city_name]['path_name']
+            path = f'regions/{path_name}/relations.json'
+            relations_dict = read_json(path)
+            infrastructure_relations = relations_dict['INFRASTRUCTURE_INDEX_RELATION']
+            this_district_infrastructure = str(int(relations_dict['DISTRICT_MEDIAN_INFRASTRUCTURE_INDEX'][ao_name]))
+            this_obj_infrastructure = str(int(indexes['infrastructure_index']))
+            indexes_coef = infrastructure_relations[this_district_infrastructure][this_obj_infrastructure]
+
+            print('this_obj_infrastructure',this_obj_infrastructure)
+            print('this_district_infrastructure',this_district_infrastructure)
+            print('indexes_coef',indexes_coef)
+            
+        object_advantage*=indexes_coef
+
         concat_market_and_forecast_df = pd.concat(
             [market_data, trend_market_data, forecast_data], axis=1)
         concat_market_and_forecast_df = concat_market_and_forecast_df[~concat_market_and_forecast_df.index.duplicated(
             keep='first')]
 
         concat_market_and_forecast_df.loc[commiss_dt:, 'price_sqm_obj_forecast'] = \
-            concat_market_and_forecast_df.loc[commiss_dt:,
-                                              'price_sqm_forecast']*object_advantage
+            concat_market_and_forecast_df.loc[commiss_dt:,'price_sqm_forecast']*object_advantage
 
         before_commiss_forecast_index = concat_market_and_forecast_df.loc[
             market_data.index[-1]:commiss_dt].index
@@ -375,6 +395,7 @@ class Calculator():
         concat_market_and_forecast_df = concat_market_and_forecast_df.iloc[:len(market_data)+period]
 
         if not object_history.isnull().values.all():
+            object_history = object_history.reindex(market_data.index).interpolate()
             concat_market_and_forecast_df.loc[object_history.index,'price_sqm_obj_history'] = object_history
 
         return concat_market_and_forecast_df
