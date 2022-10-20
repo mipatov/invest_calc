@@ -82,6 +82,11 @@ CIAN_LOAD_SQL = '''
             order by aa.src_cian_id 
         '''
 
+LOAD_TABLE_SQL = """
+    select *
+    from {0}
+"""
+
 
 POLYGONS_SQL = '''
             select *

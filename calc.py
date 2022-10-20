@@ -29,11 +29,20 @@ class Calculator():
         else:
             return None
 
-    def load_market_data(self, city_name):
+    def load_market_data_from_csv(self, city_name):
         path_name = self.regions_info[city_name]['path_name']
         path = f'regions/{path_name}/market_data.csv'
 
         return pd.read_csv(path, index_col=0)
+    
+    def load_market_data(self, city_name):
+        path_name = self.regions_info[city_name]['path_name']
+        table_name = f'test.{path_name}_market_data'
+        self.connect_db_etl()
+        table = pd.read_sql_query(LOAD_TABLE_SQL.format(table_name), self.ETL_CON)
+        self.close_db_etl()
+
+        return table
 
     
     def connect_db_etl(self):
@@ -361,6 +370,9 @@ class Calculator():
             print('this_obj_infrastructure',this_obj_infrastructure)
             print('this_district_infrastructure',this_district_infrastructure)
             print('indexes_coef',indexes_coef)
+
+            if indexes_coef == 0:
+                indexes_coef =1
             
         object_advantage*=indexes_coef
 
