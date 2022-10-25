@@ -326,9 +326,9 @@ def custom_object():
                                 else current_price
             ,'commiss_dt':commiss_dt
             ,'period':forecast_period
-            ,'city_name':city_name if city_name.strip() != '- Не выбран -' else None   
-            ,'ao_name': ao_name if filter_checkboxes['okrug'] and ao_name.strip() != '- Не выбран -' else None    
-            ,'raion_name': raion_name if filter_checkboxes['raion'] and raion_name.strip() != '- Не выбран -' else None    
+            ,'subject_name':city_name if city_name.strip() != '- Не выбран -' else None   
+            ,'district_name': ao_name if filter_checkboxes['okrug'] and ao_name.strip() != '- Не выбран -' else None    
+            ,'subdistrict_name': raion_name if filter_checkboxes['raion'] and raion_name.strip() != '- Не выбран -' else None    
             ,'class_name': class_name if filter_checkboxes['class'] and class_name.strip() != '- Не выбран -' else None   
             ,"hc_name":object_params['housing_complex']
             ,'indexes':object_params['indexes']
@@ -425,17 +425,10 @@ def price_forecast_plot(forecast_df, commiss_dt):
     from sklearn.metrics import mean_squared_error
 
     img = BytesIO()
-    # sns.set_style("ticks",{'axes.grid' : True})
     ax = forecast_df.plot()
     ax.legend(labels=['Факт рынка','Тренд рынка', 'Прогноз рынка',
               'Прогноз объекта', 'Факт объекта'])
     
-    # err = mean_squared_error(forecast_df.loc[:,'price_sqm_amt'].dropna(),forecast_df.loc[:,'price_sqm_trend'].dropna(),squared=False)
-    # # err = 1.96 * np.std(forecast_df.loc[:,'price_sqm_trend'].dropna())/np.sqrt(len(forecast_df.loc[:,'price_sqm_trend'].dropna()))
-    # ax.fill_between(forecast_df.index, (forecast_df['price_sqm_forecast'].values-err), (forecast_df['price_sqm_forecast'].values+err), color='g', alpha=.1)    
-    # ax.fill_between(forecast_df.index, (forecast_df['price_sqm_trend'].values-err), (forecast_df['price_sqm_trend'].values+err), color='orange', alpha=.1)    
-
-
     def number_format(x): return f'{x:,.0f}'.replace(",", ' ')
 
     current_moment = forecast_df.price_sqm_amt.dropna().index[-1]
@@ -466,6 +459,7 @@ def price_forecast_plot(forecast_df, commiss_dt):
     plt.xlabel('')
     plt.ylabel('')
     plt.xticks(rotation=90)
+
 
     plt.savefig(img, format='png', bbox_inches='tight')
     plt.close()

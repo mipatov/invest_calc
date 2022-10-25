@@ -8,9 +8,11 @@ from myconst import *
 
 
 class Calculator():
-
+#  класс для работы с моделью
+    
     def __init__(self, room_cnt=False, use_cache=False, regions_info_file='regions/regions.info') -> None:
         self.room_cnt_flag = room_cnt
+        self.use_cache = use_cache
         try:
             self.make_building_class_name_dict()
         except:
@@ -20,23 +22,32 @@ class Calculator():
         self.city = ""
 
 
-    def get_geo_data(self, city_name):
+    def get_geo_data(self, subject_name):
+        """
+        Загрузка данных о геометрии территориального деления субъекта 
+        """
         import os.path
-        path_name = self.regions_info[city_name]['path_name']
+        path_name = self.regions_info[subject_name]['path_name']
         path = f'regions/{path_name}/geo_data.csv'
         if os.path.isfile(path):
             return pd.read_csv(path)
         else:
             return None
 
-    def load_market_data_from_csv(self, city_name):
-        path_name = self.regions_info[city_name]['path_name']
+    def load_market_data_from_csv(self, subject_name):
+        """
+        Загрузка данных о рынке в данном субъекте из csv файла
+        """
+        path_name = self.regions_info[subject_name]['path_name']
         path = f'regions/{path_name}/market_data.csv'
 
         return pd.read_csv(path, index_col=0)
     
-    def load_market_data(self, city_name):
-        path_name = self.regions_info[city_name]['path_name']
+    def load_market_data(self, subject_name):
+        """
+        Загрузка данных о рынке в данном субъекте из БД
+        """
+        path_name = self.regions_info[subject_name]['path_name']
         table_name = f'test.{path_name}_market_data'
         self.connect_db_etl()
         table = pd.read_sql_query(LOAD_TABLE_SQL.format(table_name), self.ETL_CON)
@@ -46,6 +57,9 @@ class Calculator():
 
     
     def connect_db_etl(self):
+        """
+        Подключение к баезе ЕИСЖС
+        """
         try:
             self.ETL_CON = psycopg2.connect(ETL_DSN)
             print('[INIT] ETL DB connection successful')
@@ -54,6 +68,9 @@ class Calculator():
             
 
     def connect_db_ssvd(self):
+        """
+        Подключение к баезе SSVD
+        """
         try:
             self.SSVD_CON = psycopg2.connect(SSVD_DSN)
             print('[INFO] SSVD connection successful')
@@ -61,6 +78,9 @@ class Calculator():
             print(e)   
 
     def close_db_etl(self):
+        """
+        Закрыть соединение с базой ЕИСЖС
+        """
         try:
             self.ETL_CON.close()         
             print('[INFO] ETL connection closed')
@@ -68,41 +88,27 @@ class Calculator():
             print(e) 
 
     def close_db_ssvd(self):
+        """
+        Закрыть соединение с базой SSVD
+        """
         try:
             self.SSVD_CON.close()         
             print('[INFO] SSVD connection closed')
         except Exception as e:
             print(e)   
 
-    def get_db_connections(self):
-        try:
-            self.ETL_CON = psycopg2.connect(ETL_DSN)
-            print('[INIT] ETL DB connection successful')
-        except Exception as e:
-            print(e)
 
-        try:
-            self.SSVD_CON = psycopg2.connect(SSVD_DSN)
-            print('[INIT] SSVD connection successful')
-        except Exception as e:
-            print(e)
+    def get_polygons(self, subject_name):
+        """
+        Получение и обработка данных о геометрии 
+        """
 
-    def check_connections(self):
-        try:
-            cur = self.ETL_CON.cursor()
-            cur.execute('SELECT 1')
-            cur = self.SSVD_CON.cursor()
-            cur.execute('SELECT 1')
-        except:
-            self.get_db_connections()
-
-    def get_polygons(self, city_name):
         from geopandas import GeoDataFrame
         from shapely import wkt
 
 #         sel_sql = POLYGONS_SQL
 #         df_polygons = pd.read_sql_query(sel_sql,self.ETL_CON)
-        df_polygons = self.get_geo_data(city_name)
+        df_polygons = self.get_geo_data(subject_name)
 
         if df_polygons is None:
             return None
@@ -146,6 +152,9 @@ class Calculator():
         return pivot_quarters
 
     def make_building_class_name_dict(self):
+        """
+        Создание словаря соответсвия классов и кодов циан
+        """
         self.connect_db_ssvd()
         self.code2cls_name = pd.read_sql_query(DCT_BUILDING_CLS_SQL, self.SSVD_CON).set_index(
             'building_class_type').to_dict()['building_class_name']
@@ -154,6 +163,9 @@ class Calculator():
 
 
     def get_obj_info(self, obj_id):
+        """
+        Получение инофрмации об объекте из базы ЕИСЖС
+        """
         from geopandas import GeoDataFrame, points_from_xy, sjoin
 
         self.connect_db_etl()
@@ -189,12 +201,18 @@ class Calculator():
         return gdf_quarters.iloc[0]
 
     
-    def find_housing_complex_cian(self, city_name, search_name):
+    def find_housing_complex_cian(self, subject_name, search_name):
+        """
+        Поиск ЖК по названию
+        """
         from fuzzywuzzy import process
 
-        if self.city != city_name:
-            self.city = city_name
-            self.market_data = self.load_market_data(city_name)
+        if self.city != subject_name:
+            self.city = subject_name
+            if self.use_cache : 
+                self.market_data = self.load_market_data_from_csv(subject_name)
+            else:
+                self.market_data = self.load_market_data(subject_name)
 
         hc_df = self.market_data.query('advert_category_code == 3')[
             ['housing_complex_name', 'commissioning_date']].drop_duplicates()
@@ -204,33 +222,52 @@ class Calculator():
         return hc_df.loc[[r[-1] for r in results]]
 
     
-    def get_housing_complex_price_dynamics(self, city_name, hc_name, commissioning_date):
-
-        if self.city != city_name:
-            self.city = city_name
-            self.market_data = self.load_market_data(city_name)
+    def get_housing_complex_price_dynamics(self, subject_name, hc_name, commissioning_date):
+        """
+        Возварщает историческую динамику цен на конкретный ЖК
+        """
+        if self.city != subject_name:
+            self.city = subject_name
+            if self.use_cache : 
+                self.market_data = self.load_market_data_from_csv(subject_name)
+            else:
+                self.market_data = self.load_market_data(subject_name)
 
         return price_line(self.market_data.query('advert_category_code == 3 and housing_complex_name == @hc_name and commissioning_date == @commissioning_date'), counts=True)
 
     
-    def get_market_data(self, city_name, ao_name=None, raion_name=None, cls_name=None,
-                        transport_accessibility=None,  exclude_hc_name=None, exclude_hc_comiss_dt=None,
+    def get_market_data(self, subject_name, district_name=None, subdistrict_name=None, cls_name=None,
+                         exclude_hc_name=None, exclude_hc_comiss_dt=None,
                         today_date=None, threshold=6):
+        """
+        Функция возварщает историческую динамику рынка по заданным параметрам 
+        :param subject_name: название субъекта
+        :param district_name: название окурга
+        :param subdistrict_name: название района
+        :param cls_name: название класса
+        :param exclude_hc_name: название ЖК, который следует исключить из рынка
+        :param exclude_hc_comiss_dt: дата сдачи ЖК, который следует исключить из рынка
+        :param today_date: дата из которой делается прогноз
+        :param threshold: минимальное приемлемое количество месяцев в истории  
+        """
         today_date = today_date if today_date else datetime.datetime.today().strftime("%Y-%m-%d")
 
-        if self.city != city_name:
-            self.city = city_name
-            self.market_data = self.load_market_data(city_name)
+        if self.city != subject_name:
+            self.city = subject_name
+            if self.use_cache : 
+                self.market_data = self.load_market_data_from_csv(subject_name)
+            else:
+                self.market_data = self.load_market_data(subject_name)
 
         qq = "advert_category_code == 3 \
             and commissioning_date <= @today_date\
             and last_date > '2021-04-03'\
             and last_date < '2022-08-01'"
 
-        if ao_name and 'district' in self.market_data.columns:
-            qq += " and district == @ao_name "
+        if district_name and 'district' in self.market_data.columns:
+            qq += " and district == @district_name "
 
-        if raion_name and 'subdistrict' in self.market_data.columns:
+        if subdistrict_name and 'subdistrict' in self.market_data.columns:
             qq += " and subdistrict == @raion_name "
 
         if cls_name:
@@ -253,12 +290,12 @@ class Calculator():
         if price_line_df is None or len(price_line_df) < threshold:
             print('[WARN] No such building class in this area. Calculate market from other classes and areas of same level')
 
-            path_name = self.regions_info[city_name]['path_name']
+            path_name = self.regions_info[subject_name]['path_name']
             path = f'regions/{path_name}/relations.json'
             relations_dict = read_json(path)
 
             market_data = price_convert(
-                self.market_data, relations_dict, class_name=cls_name, district=ao_name, subdistrict=raion_name)
+                self.market_data, relations_dict, class_name=cls_name, district=district_name, subdistrict=subdistrict_name)
 
             price_line_df = price_line(market_data)
 
@@ -273,7 +310,7 @@ class Calculator():
         if price_line_df is None or len(price_line_df) < threshold:
             print('[WARN] No data in this place! Get data from next level area.')
             market_data = price_convert(
-                self.market_data, relations_dict, class_name=cls_name, district=ao_name)
+                self.market_data, relations_dict, class_name=cls_name, district=district_name)
             price_line_df = price_line(market_data)
 
             if price_line_df is not None and not price_line_df.empty:
@@ -286,13 +323,11 @@ class Calculator():
 
         return price_line_df
 
-    def get_current_price(self, obj_id):
-
-        price_df = self.get_price_dynamics(obj_id).iloc[[0]]
-
-        return price_df
 
     def get_price_dynamics(self, obj_id):
+        """
+        Возвращает историческую динамику цен объекта ЕИСЖС
+        """
         self.connect_db_etl()
 
         query = OBJ_PRICE_DYNAMICS_SQL.format(obj_id)
@@ -303,6 +338,11 @@ class Calculator():
 
 
     def _make_forecast(self, market_data: pd.DataFrame, forecast_period,):
+        """
+        Формирование прогноза рынка
+        :param market_data: исторические данные рынка 
+        :param forecast_period: срок прогнозирования
+        """
         path_name = self.regions_info[self.city]['path_name']
         folder_path = f'regions/{path_name}/'
         macro = MacroMLModel(market_data, forecast_period,
@@ -310,36 +350,50 @@ class Calculator():
 
         return macro.market_forecast_df
 
-    def make_forecast_custom(self, current_price, commiss_dt, period=12, city_name=None, ao_name=None, raion_name=None, class_name=None, hc_name=None, indexes = {}):
-        if city_name is None:
-            print('[ERR] city is None!')
+    def make_forecast_custom(self, current_price, commiss_dt, period=12, subject_name=None, district_name=None, subdistrict_name=None, class_name=None, hc_name=None, indexes = {}):
+        """
+        Подготовка данных и формирования прогноза рынка
+        :param current_price: if <int> :  текцщая цена объекта
+                              if <pd.Series> : историческая динамика цены объекта
+        :param commiss_dt: дата сдачи объекта
+        :param period: срок прогнозирования
+        :param subject_name: название субъекта
+        :param district_name: название окурга
+        :param subdistrict_name: название района
+        :param class_name: название класса
+        :param hc_name: называние ЖК
+        :param indexes: словарь с иднексами (инфраструкутуры, транспортной доступности, качества воздуха) для данного объекта
+        """
+        if subject_name is None:
+            print('[ERR] subject is None!')
             return None
 
-        # print(indexes)
-
-        
-
+    
         threshold = 6
         market_data = self.get_market_data(
-            city_name, ao_name, raion_name, class_name, exclude_hc_name=hc_name, exclude_hc_comiss_dt=commiss_dt, threshold=threshold,
+            subject_name, district_name, subdistrict_name, class_name, exclude_hc_name=hc_name, exclude_hc_comiss_dt=commiss_dt, threshold=threshold,
             today_date='2022-08-01')
 
-        # пока выбрасываем август
+        # пока выбрасываем все, что после августа
         market_data = market_data.loc[:'2022-07-01']
 
+        # формируем тренд
         trend_market_data = market_data.copy()
         trend_market_data.price_sqm_amt = lowess_trend(
             market_data.price_sqm_amt.values)
         trend_market_data = trend_market_data.rename(
             columns={'price_sqm_amt': 'price_sqm_trend'})
 
+        # если слишком мало данных - возвращаем путой датафрейм
         if market_data is None or len(market_data) < threshold:
-            print(f'Found {len(market_data)} months')
+            print(f'Found {len(market_data)} months. Return empty df')
             return pd.DataFrame(columns=['price_sqm_amt', 'price_sqm_forecast', 'price_sqm_obj_forecast'])
 
+        # Прогноз делается в любом случае не меньше чем до даты сдачи
         before_commiss_period = diff_month(commiss_dt, market_data.index[-1])+1
         forecast_period = max(period, before_commiss_period)
 
+        # если есть динамика, вычисляем коэффициент превосходства объекта над рынком
         object_history = pd.DataFrame(
             columns=['price_sqm_obj_history'], index=market_data.index)
         object_advantage = 1
@@ -355,15 +409,21 @@ class Calculator():
             if k > 1:
                 object_advantage *= k
 
+        #  делаем прогноз тренда рынка
         forecast_data = self._make_forecast(trend_market_data, forecast_period)
 
+        # считаем коэффициент влияния индексов.
+        # на данный момент реальизовано только влияние индекса инфраструктуры
+        # для каждого округа расчитано медианное значение индекса. 
+        # Это значение сравнивается со значением индекса для конкретного дома \
+        # и берется соответствующий коээфициент их отношения.
         indexes_coef = 1
         if len(indexes)>0:
-            path_name = self.regions_info[city_name]['path_name']
+            path_name = self.regions_info[subject_name]['path_name']
             path = f'regions/{path_name}/relations.json'
             relations_dict = read_json(path)
             infrastructure_relations = relations_dict['INFRASTRUCTURE_INDEX_RELATION']
-            this_district_infrastructure = str(int(relations_dict['DISTRICT_MEDIAN_INFRASTRUCTURE_INDEX'][ao_name]))
+            this_district_infrastructure = str(int(relations_dict['DISTRICT_MEDIAN_INFRASTRUCTURE_INDEX'][district_name]))
             this_obj_infrastructure = str(int(indexes['infrastructure_index']))
             indexes_coef = infrastructure_relations[this_district_infrastructure][this_obj_infrastructure]
 
@@ -376,6 +436,7 @@ class Calculator():
             
         object_advantage*=indexes_coef
 
+        # собираем все ряды в один датафрейм
         concat_market_and_forecast_df = pd.concat(
             [market_data, trend_market_data, forecast_data], axis=1)
         concat_market_and_forecast_df = concat_market_and_forecast_df[~concat_market_and_forecast_df.index.duplicated(
@@ -412,8 +473,18 @@ class Calculator():
 
         return concat_market_and_forecast_df
 
-    def validate_market(self, city_name=None, ao_name=None, raion_name=None, class_name=None, hc_name=None, validate_period=6):
-        if city_name is None:
+    def validate_market(self, subject_name=None, district_name=None, subdistrict_name=None, class_name=None, hc_name=None, validate_period=6):
+        """
+        Построение ретропрогноза рынка
+        :param validate_period: срок ретропрогноза
+        :param subject_name: название субъекта
+        :param district_name: название окурга
+        :param subdistrict_name: название района
+        :param class_name: название класса
+        :param hc_name: называние ЖК
+        """
+
+        if subject_name is None:
             print('[ERR] city is None!')
             return None
 
@@ -422,12 +493,12 @@ class Calculator():
             datetime.datetime.today(), -validate_period)
         
 
-        print('city : ', city_name, ' ao : ', ao_name,
-              ' raion : ', raion_name, ' class : ', class_name)
+        print('city : ', subject_name, ' ao : ', district_name,
+              ' raion : ', subdistrict_name, ' class : ', class_name)
         market_data = self.get_market_data(
-            city_name, ao_name, raion_name, class_name, today_date=prev_today_date.strftime("%Y-%m-%d"))
+            subject_name, district_name, subdistrict_name, class_name, today_date=prev_today_date.strftime("%Y-%m-%d"))
 
-        # пока выбрасываем август
+        # пока выбрасываем все, что после августа
         market_data = market_data.loc[:'2022-07-01']
 
         trend_market_data = market_data.copy()
